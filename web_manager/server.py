@@ -1,5 +1,7 @@
 import os
 import sys
+import base64
+import tempfile
 
 # Configure UTF-8 encoding for standard streams
 try:
@@ -29,7 +31,7 @@ bot_runner = BotRunner(ROOT_DIR)
 # Global Zalo QR Login state
 qr_login_state = {
     "status": "idle",       # idle, generating, generated, scanned, success, failed
-    "image_path": "",
+    "qr_base64": "",
     "error_message": "",
     "user_info": None
 }
@@ -80,34 +82,32 @@ SESSION_COOKIES = {json.dumps(cookies)}
 
 def qr_login_worker():
     global qr_login_state, qr_api_instance
+    tmp_qr_path = None
     try:
         qr_login_state["status"] = "generating"
         qr_login_state["error_message"] = ""
         qr_login_state["user_info"] = None
-        
-        static_qr_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
-        os.makedirs(static_qr_dir, exist_ok=True)
-        qr_dest_path = os.path.join(static_qr_dir, 'zalo_qr.png')
-        
-        # Remove old QR image if exists
-        if os.path.exists(qr_dest_path):
-            try:
-                os.remove(qr_dest_path)
-            except Exception:
-                pass
-                
-        qr_login_state["image_path"] = ""
+        qr_login_state["qr_base64"] = ""
+
+        # Use temp file for QR (works reliably on Render and any OS)
+        tmp_fd, tmp_qr_path = tempfile.mkstemp(suffix='.png')
+        os.close(tmp_fd)
 
         # Initialize ZaloAPI with no credentials
         qr_api_instance = ZaloAPI("", "", "", auto_login=False)
 
         def on_qr_gen(path):
+            try:
+                with open(path, 'rb') as f:
+                    img_data = f.read()
+                qr_login_state["qr_base64"] = base64.b64encode(img_data).decode('utf-8')
+            except Exception as e:
+                pass
             qr_login_state["status"] = "generated"
-            qr_login_state["image_path"] = "/static/zalo_qr.png"
 
         # Start QR login flow (blocking wait for scan and confirm)
         result = qr_api_instance.loginWithQR(
-            qr_path=qr_dest_path,
+            qr_path=tmp_qr_path,
             on_qr_generated=on_qr_gen
         )
 
@@ -127,6 +127,12 @@ def qr_login_worker():
     except Exception as e:
         qr_login_state["status"] = "failed"
         qr_login_state["error_message"] = str(e)
+    finally:
+        if tmp_qr_path and os.path.exists(tmp_qr_path):
+            try:
+                os.remove(tmp_qr_path)
+            except Exception:
+                pass
 
 @app.route('/')
 def index():

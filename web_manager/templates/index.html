@@ -2,8 +2,9 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
     <title>Zalo Bot Manager Dashboard</title>
+    <meta name="description" content="Quản lý bot Zalo của bạn - Đăng nhập QR, cấu hình và theo dõi hoạt động">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -13,28 +14,33 @@
 <body>
     <div class="glow-bg"></div>
     
+    <!-- Mobile Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    
     <div class="app-container">
         <!-- Sidebar / Brand -->
-        <aside class="sidebar">
-            <div class="brand">
-                <div class="brand-logo">
-                    <i class="fa-solid fa-robot"></i>
+        <aside class="sidebar" id="sidebar">
+            <div>
+                <div class="brand">
+                    <div class="brand-logo">
+                        <i class="fa-solid fa-robot"></i>
+                    </div>
+                    <div class="brand-name">
+                        <h2>ZaloBot</h2>
+                        <span>v2.0 Dashboard</span>
+                    </div>
                 </div>
-                <div class="brand-name">
-                    <h2>ZaloBot</h2>
-                    <span>v2.0 Dashboard</span>
-                </div>
+                
+                <nav class="side-nav">
+                    <a href="#" class="nav-item active"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
+                    <a href="https://zalo.me/g/ur58vacl0hhscxjwfzsj" target="_blank" class="nav-item"><i class="fa-solid fa-users"></i> Nhóm Hỗ Trợ</a>
+                </nav>
             </div>
-            
-            <nav class="side-nav">
-                <a href="#" class="nav-item active"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
-                <a href="https://zalo.me/g/ur58vacl0hhscxjwfzsj" target="_blank" class="nav-item"><i class="fa-solid fa-users"></i> Nhóm Hỗ Trợ</a>
-            </nav>
             
             <div class="bot-status-card">
                 <div class="status-indicator" id="sidebar-status-indicator"></div>
                 <div class="status-info">
-                    <span class="status-label">Trạng thái</span>
+                    <span class="status-label">Trạng thái Bot</span>
                     <span class="status-value" id="sidebar-status-text">Đang Dừng</span>
                 </div>
             </div>
@@ -44,9 +50,14 @@
         <main class="main-content">
             <!-- Top Navbar -->
             <header class="top-bar">
-                <div class="page-title">
-                    <h1>Bảng Điều Khiển Bot Zalo</h1>
-                    <p>Đăng nhập, cấu hình và quản lý tiến trình bot của bạn</p>
+                <div class="top-bar-left">
+                    <button class="hamburger-btn" id="hamburger-btn" aria-label="Mở menu">
+                        <i class="fa-solid fa-bars"></i>
+                    </button>
+                    <div class="page-title">
+                        <h1>Bảng Điều Khiển</h1>
+                        <p>Đăng nhập, cấu hình và quản lý bot Zalo</p>
+                    </div>
                 </div>
                 <div class="system-stats">
                     <div class="stat-item">
@@ -69,15 +80,15 @@
                     
                     <div class="qr-container">
                         <div class="qr-box" id="qr-box">
-                            <!-- Loading state -->
                             <div class="qr-placeholder" id="qr-placeholder">
-                                <i class="fa-solid fa-spinner fa-spin qr-spinner"></i>
-                                <p>Đang chuẩn bị mã QR...</p>
+                                <i class="fa-solid fa-qrcode" style="font-size: 2.5rem; opacity: 0.3;"></i>
+                                <p>Nhấn nút bên dưới để lấy mã QR</p>
                             </div>
-                            <!-- QR Image -->
                             <img src="" id="qr-image" class="qr-img hidden" alt="Zalo QR Login">
                         </div>
-                        <button class="btn btn-primary" id="btn-generate-qr"><i class="fa-solid fa-rotate"></i> Lấy Mã QR Mới</button>
+                        <button class="btn btn-primary" id="btn-generate-qr">
+                            <i class="fa-solid fa-rotate"></i> Lấy Mã QR Mới
+                        </button>
                     </div>
                     
                     <div class="qr-status-msg" id="qr-status-msg">
@@ -115,15 +126,21 @@
                         </div>
                         
                         <div class="form-actions">
-                            <button type="submit" class="btn btn-success" id="btn-save-config"><i class="fa-solid fa-floppy-disk"></i> Lưu Cấu Hình</button>
+                            <button type="submit" class="btn btn-success" id="btn-save-config">
+                                <i class="fa-solid fa-floppy-disk"></i> Lưu Cấu Hình
+                            </button>
                         </div>
                     </form>
                     
                     <div class="control-actions">
                         <h4 class="control-title"><i class="fa-solid fa-power-off"></i> Điều Khiển Bot</h4>
                         <div class="btn-group">
-                            <button class="btn btn-start" id="btn-start-bot"><i class="fa-solid fa-play"></i> START BOT</button>
-                            <button class="btn btn-stop" id="btn-stop-bot" disabled><i class="fa-solid fa-stop"></i> STOP BOT</button>
+                            <button class="btn btn-start" id="btn-start-bot">
+                                <i class="fa-solid fa-play"></i> START BOT
+                            </button>
+                            <button class="btn btn-stop" id="btn-stop-bot" disabled>
+                                <i class="fa-solid fa-stop"></i> STOP BOT
+                            </button>
                         </div>
                     </div>
                 </section>
@@ -137,8 +154,12 @@
                         <p>Tiến trình và nhật ký hoạt động của bot</p>
                     </div>
                     <div class="console-actions">
-                        <button class="console-btn" id="btn-clear-console" title="Xóa màn hình"><i class="fa-solid fa-trash-can"></i></button>
-                        <button class="console-btn" id="btn-auto-scroll" title="Tự động cuộn" class="active"><i class="fa-solid fa-angles-down"></i></button>
+                        <button class="console-btn" id="btn-clear-console" title="Xóa màn hình">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                        <button class="console-btn active" id="btn-auto-scroll" title="Tự động cuộn">
+                            <i class="fa-solid fa-angles-down"></i>
+                        </button>
                     </div>
                 </div>
                 
@@ -147,6 +168,16 @@
                 </div>
             </section>
         </main>
+    </div>
+
+    <!-- Mobile Bottom Status Bar -->
+    <div class="mobile-status-bar">
+        <div class="status-indicator" id="mobile-status-indicator"></div>
+        <div class="status-info">
+            <span class="status-label">Trạng thái</span>
+            <span class="status-value" id="mobile-status-text">Đang Dừng</span>
+        </div>
+        <div style="margin-left:auto; font-size: 0.8rem; color: var(--text-secondary);" id="mobile-bot-name">-</div>
     </div>
 
     <script src="/static/js/app.js"></script>

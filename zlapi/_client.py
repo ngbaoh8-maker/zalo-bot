@@ -168,7 +168,7 @@ class ZaloAPI(object):
             raise ZaloLoginError(f"Tạo QR thất bại: {result.get('error_message')}")
         return result.get("data")
 
-    def _qr_wait_for_scan(self, session, user_agent, version, code, timeout=100):
+    def _qr_wait_for_scan(self, session, user_agent, version, code, timeout=300):
         url = "https://id.zalo.me/account/authen/qr/waiting-scan"
         headers = self._get_qr_post_headers(user_agent)
         data = {"code": code, "continue": "https://chat.zalo.me/", "v": version}
@@ -188,7 +188,7 @@ class ZaloAPI(object):
         
         raise ZaloLoginError("Hết thời gian chờ quét mã QR.")
 
-    def _qr_wait_for_confirm(self, session, user_agent, version, code, timeout=100):
+    def _qr_wait_for_confirm(self, session, user_agent, version, code, timeout=300):
         url = "https://id.zalo.me/account/authen/qr/waiting-confirm"
         headers = self._get_qr_post_headers(user_agent)
         data = {

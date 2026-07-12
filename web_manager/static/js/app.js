@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // DOM Elements
     const qrPlaceholder = document.getElementById('qr-placeholder');
     const qrImage = document.getElementById('qr-image');
+    const qrBox = document.getElementById('qr-box');
     const btnGenerateQr = document.getElementById('btn-generate-qr');
     const qrStatusMsg = document.getElementById('qr-status-msg');
     
@@ -16,10 +17,18 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const sidebarStatusIndicator = document.getElementById('sidebar-status-indicator');
     const sidebarStatusText = document.getElementById('sidebar-status-text');
+    const mobileStatusIndicator = document.getElementById('mobile-status-indicator');
+    const mobileStatusText = document.getElementById('mobile-status-text');
+    const mobileBotName = document.getElementById('mobile-bot-name');
     
     const terminalBody = document.getElementById('terminal-body');
     const btnClearConsole = document.getElementById('btn-clear-console');
     const btnAutoScroll = document.getElementById('btn-auto-scroll');
+    
+    // Mobile hamburger
+    const hamburgerBtn = document.getElementById('hamburger-btn');
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebar-overlay');
     
     // Application States
     let botRunning = false;
@@ -28,11 +37,36 @@ document.addEventListener('DOMContentLoaded', () => {
     let logsPollInterval = null;
     let statusPollInterval = null;
 
-    // Initialize Page
+    // ============================
+    // HAMBURGER MENU
+    // ============================
+    function openSidebar() {
+        sidebar.classList.add('open');
+        sidebarOverlay.classList.add('open');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeSidebar() {
+        sidebar.classList.remove('open');
+        sidebarOverlay.classList.remove('open');
+        document.body.style.overflow = '';
+    }
+
+    hamburgerBtn.addEventListener('click', openSidebar);
+    sidebarOverlay.addEventListener('click', closeSidebar);
+
+    // Close sidebar when nav item clicked on mobile
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', () => {
+            if (window.innerWidth < 768) closeSidebar();
+        });
+    });
+
+    // ============================
+    // INITIALIZE
+    // ============================
     loadConfig();
     checkBotStatus();
-    
-    // Poll Bot Status, Logs every few seconds
     statusPollInterval = setInterval(checkBotStatus, 3000);
     logsPollInterval = setInterval(fetchLogs, 1500);
 
@@ -52,24 +86,49 @@ document.addEventListener('DOMContentLoaded', () => {
         btnAutoScroll.classList.toggle('active', autoScroll);
     });
 
-    // Helper functions
+    // ============================
+    // HELPER FUNCTIONS
+    // ============================
     function appendTerminalLine(text, type = 'normal') {
         const line = document.createElement('div');
         line.className = `terminal-line ${type}-line`;
         line.innerText = text;
         terminalBody.appendChild(line);
+        // Limit log lines to 500
+        while (terminalBody.children.length > 500) {
+            terminalBody.removeChild(terminalBody.firstChild);
+        }
         if (autoScroll) {
             terminalBody.scrollTop = terminalBody.scrollHeight;
         }
     }
 
     function parseAnsiColors(text) {
-        // Strip out ANSI color codes for clean reading
-        return text.replace(/\033\[[0-9;]*m/g, '')
-                   .replace(/\x1b\[[0-9;]*m/g, '');
+        return text.replace(/\033\[[0-9;]*m/g, '').replace(/\x1b\[[0-9;]*m/g, '');
     }
 
-    // API Calls
+    function updateBotStatusUI(running) {
+        botRunning = running;
+        btnStartBot.disabled = running;
+        btnStopBot.disabled = !running;
+        
+        const indicators = [sidebarStatusIndicator, mobileStatusIndicator];
+        const texts = [sidebarStatusText, mobileStatusText];
+
+        indicators.forEach(el => {
+            if (el) el.classList.toggle('active', running);
+        });
+        texts.forEach(el => {
+            if (el) {
+                el.innerText = running ? 'Đang Chạy' : 'Đang Dừng';
+                el.style.color = running ? 'var(--success-color)' : 'var(--danger-color)';
+            }
+        });
+    }
+
+    // ============================
+    // API CALLS
+    // ============================
     async function loadConfig() {
         try {
             const res = await fetch('/api/config');
@@ -78,6 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
             adminIdInput.value = data.admin_id || '';
             botPrefixInput.value = data.prefix || '?';
             statBotName.innerText = data.bot_name || 'Zalo Bot';
+            if (mobileBotName) mobileBotName.innerText = data.bot_name || 'Zalo Bot';
         } catch (err) {
             console.error('Error loading config:', err);
         }
@@ -100,6 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await res.json();
             if (result.status === 'success') {
                 statBotName.innerText = configData.bot_name;
+                if (mobileBotName) mobileBotName.innerText = configData.bot_name;
                 appendTerminalLine(`[SYSTEM] ${result.message}`, 'success');
             } else {
                 appendTerminalLine(`[SYSTEM ERROR] Không thể lưu cấu hình!`, 'error');
@@ -111,20 +172,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function generateQR() {
         btnGenerateQr.disabled = true;
+        qrBox.classList.remove('has-qr');
+        qrPlaceholder.innerHTML = '<i class="fa-solid fa-spinner fa-spin qr-spinner"></i><p>Đang tạo mã QR...</p>';
         qrPlaceholder.classList.remove('hidden');
         qrImage.classList.add('hidden');
-        qrStatusMsg.innerHTML = '<span class="badge badge-info">Generating</span> Đang tạo mã QR đăng nhập...';
+        qrStatusMsg.innerHTML = '<span class="badge badge-info">Generating</span> Đang kết nối đến Zalo, vui lòng chờ...';
         
         try {
-            const res = await fetch('/api/qr/generate', { method: 'POST' });
-            const data = await res.json();
-            
-            // Start polling QR status
+            await fetch('/api/qr/generate', { method: 'POST' });
             if (qrPollInterval) clearInterval(qrPollInterval);
             qrPollInterval = setInterval(pollQRStatus, 2000);
         } catch (err) {
             btnGenerateQr.disabled = false;
-            qrStatusMsg.innerHTML = '<span class="badge badge-danger">Error</span> Lỗi kết nối server.';
+            qrStatusMsg.innerHTML = '<span class="badge badge-danger">Lỗi</span> Không thể kết nối đến server.';
         }
     }
 
@@ -134,30 +194,40 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             
             if (data.status === 'generating') {
-                qrStatusMsg.innerHTML = '<span class="badge badge-info">Generating</span> Đang tạo mã QR...';
+                qrStatusMsg.innerHTML = '<span class="badge badge-info">Generating</span> Đang tạo mã QR từ Zalo...';
+
             } else if (data.status === 'generated') {
-                qrPlaceholder.classList.add('hidden');
-                qrImage.src = data.image_path + '?t=' + new Date().getTime();
-                qrImage.classList.remove('hidden');
-                qrStatusMsg.innerHTML = '<span class="badge badge-info">Chờ Quét</span> Vui lòng dùng ứng dụng Zalo trên điện thoại quét mã QR để đăng nhập.';
+                // Show QR from base64 data - no filesystem dependency!
+                if (data.qr_base64) {
+                    qrImage.src = 'data:image/png;base64,' + data.qr_base64;
+                    qrPlaceholder.classList.add('hidden');
+                    qrImage.classList.remove('hidden');
+                    qrBox.classList.add('has-qr');
+                }
+                qrStatusMsg.innerHTML = '<span class="badge badge-info">Chờ Quét</span> Mở ứng dụng Zalo trên điện thoại → quét mã QR này để đăng nhập.';
                 btnGenerateQr.disabled = false;
+
             } else if (data.status === 'success') {
                 clearInterval(qrPollInterval);
                 qrPollInterval = null;
+                qrBox.classList.remove('has-qr');
+                qrPlaceholder.innerHTML = '<i class="fa-solid fa-circle-check" style="font-size: 3rem; color: #3fb950;"></i><p>Đăng nhập thành công!</p>';
                 qrPlaceholder.classList.remove('hidden');
                 qrImage.classList.add('hidden');
-                qrPlaceholder.innerHTML = '<i class="fa-solid fa-circle-check" style="font-size: 3rem; color: #3fb950;"></i><p>Đăng nhập thành công!</p>';
-                qrStatusMsg.innerHTML = `<span class="badge badge-success">Thành Công</span> Đã đăng nhập tài khoản: <strong>${data.user_info?.name || 'Zalo User'}</strong>`;
-                appendTerminalLine(`[SYSTEM] Zalo login thành công! Tài khoản: ${data.user_info?.name}`, 'success');
+                const name = data.user_info?.name || 'Zalo User';
+                qrStatusMsg.innerHTML = `<span class="badge badge-success">Thành Công</span> Đã đăng nhập: <strong>${name}</strong>`;
+                appendTerminalLine(`[SYSTEM] ✅ Zalo đăng nhập thành công! Tài khoản: ${name}`, 'success');
                 btnGenerateQr.disabled = false;
+
             } else if (data.status === 'failed') {
                 clearInterval(qrPollInterval);
                 qrPollInterval = null;
+                qrBox.classList.remove('has-qr');
+                qrPlaceholder.innerHTML = '<i class="fa-solid fa-circle-xmark" style="font-size: 3rem; color: #f85149;"></i><p>Thất bại</p>';
                 qrPlaceholder.classList.remove('hidden');
                 qrImage.classList.add('hidden');
-                qrPlaceholder.innerHTML = '<i class="fa-solid fa-circle-xmark" style="font-size: 3rem; color: #f85149;"></i><p>Thất bại</p>';
                 qrStatusMsg.innerHTML = `<span class="badge badge-danger">Lỗi</span> ${data.error_message}`;
-                appendTerminalLine(`[SYSTEM ERROR] Đăng nhập QR thất bại: ${data.error_message}`, 'error');
+                appendTerminalLine(`[SYSTEM ERROR] ❌ Đăng nhập QR thất bại: ${data.error_message}`, 'error');
                 btnGenerateQr.disabled = false;
             }
         } catch (err) {
@@ -169,23 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch('/api/bot/status');
             const data = await res.json();
-            
-            botRunning = data.running;
-            
-            // Update button states
-            btnStartBot.disabled = botRunning;
-            btnStopBot.disabled = !botRunning;
-            
-            // Update indicators
-            if (botRunning) {
-                sidebarStatusIndicator.classList.add('active');
-                sidebarStatusText.innerText = 'Đang Chạy';
-                sidebarStatusText.style.color = '#3fb950';
-            } else {
-                sidebarStatusIndicator.classList.remove('active');
-                sidebarStatusText.innerText = 'Đang Dừng';
-                sidebarStatusText.style.color = '#f85149';
-            }
+            updateBotStatusUI(data.running);
         } catch (err) {
             console.error('Error checking bot status:', err);
         }
@@ -241,11 +295,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (line.trim()) {
                         const cleanLine = parseAnsiColors(line);
                         let type = 'normal';
-                        if (cleanLine.includes('[ERROR]') || cleanLine.includes('Lỗi') || cleanLine.includes('Exception')) {
+                        if (cleanLine.includes('[ERROR]') || cleanLine.includes('Lỗi') || cleanLine.includes('Exception') || cleanLine.includes('Error')) {
                             type = 'error';
-                        } else if (cleanLine.includes('[SYSTEM]') || cleanLine.includes('Khởi động')) {
+                        } else if (cleanLine.includes('[SYSTEM]') || cleanLine.includes('Khởi động') || cleanLine.includes('SYSTEM')) {
                             type = 'system';
-                        } else if (cleanLine.includes('thành công') || cleanLine.includes('SUCCESS') || cleanLine.includes('SẴN SÀNG')) {
+                        } else if (cleanLine.includes('thành công') || cleanLine.includes('SUCCESS') || cleanLine.includes('SẴN SÀNG') || cleanLine.includes('✅')) {
                             type = 'success';
                         }
                         appendTerminalLine(cleanLine, type);
