@@ -1,0 +1,58 @@
+{
+  "owner": "DucDuydzai cuto",
+  "bot_version": "v2.0.1",
+  "title": "SYSTEM MONITOR",
+  "online_text": "ONLINE",
+  "footer_ok": "✨ Bot đang hoạt động ổn định!",
+  "powered_by": "Powered by DucDuydzai cuto ✨",
+  "theme": {
+    "w": 1536,
+    "h": 768,
+    "bg1": [
+      10,
+      14,
+      22
+    ],
+    "bg2": [
+      18,
+      28,
+      44
+    ],
+    "panel": [
+      20,
+      28,
+      42,
+      190
+    ],
+    "panel2": [
+      16,
+      22,
+      34,
+      170
+    ],
+    "text": [
+      235,
+      245,
+      255,
+      240
+    ],
+    "muted": [
+      160,
+      175,
+      195,
+      210
+    ],
+    "stroke": [
+      80,
+      110,
+      160,
+      80
+    ],
+    "grid": [
+      100,
+      140,
+      200,
+      30
+    ]
+  }
+}

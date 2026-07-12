@@ -1,0 +1,12 @@
+{
+  "1": {"name": "Vòng Cổ Ánh Sáng", "desc": "Tăng 10% lực chiến", "power": 10, "price": 300},
+  "2": {"name": "Nhẫn Đồng Bé", "desc": "Tăng 8% lực chiến", "power": 8, "price": 200},
+  "3": {"name": "Giày Lông Sói", "desc": "Tăng 12% lực chiến", "power": 12, "price": 350},
+  "4": {"name": "Bùa Lá May", "desc": "Tăng 15% lực chiến", "power": 15, "price": 400},
+  "5": {"name": "Dây Chuyền Bạc", "desc": "Tăng 18% lực chiến", "power": 18, "price": 500},
+  "6": {"name": "Găng Tay Da", "desc": "Tăng 20% lực chiến", "power": 20, "price": 600},
+  "7": {"name": "Vòng Gỗ Rừng Xanh", "desc": "Tăng 22% lực chiến", "power": 22, "price": 650},
+  "8": {"name": "Giáp Tre", "desc": "Tăng 25% lực chiến", "power": 25, "price": 700},
+  "9": {"name": "Mũ Sắt Nhỏ", "desc": "Tăng 27% lực chiến", "power": 27, "price": 750},
+  "10": {"name": "Ngọc Gió Mùa", "desc": "Tăng 30% lực chiến", "power": 30, "price": 800},
+}

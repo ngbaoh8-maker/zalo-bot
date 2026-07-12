@@ -1,0 +1,4 @@
+body{font-family:Arial,Helvetica,sans-serif;max-width:900px;margin:40px auto;padding:0 20px;background:#fdfdfd;color:#222;}
+header h1{margin-bottom:4px;color:#512da8}
+button{padding:8px 12px;border-radius:6px;border:1px solid #ccc;cursor:pointer}
+button:hover{background:#512da8;color:#fff}

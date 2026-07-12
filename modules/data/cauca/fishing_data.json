@@ -1,0 +1,170 @@
+{
+  "3431208525068959543": {
+    "level": 1,
+    "exp": 0,
+    "coins": 0,
+    "rod": "basic",
+    "bait": null,
+    "area": "lake",
+    "stats": {
+      "common": 0,
+      "rare": 0,
+      "legendary": 0,
+      "trash": 0
+    },
+    "bag": [],
+    "bossKills": 0,
+    "upgrades": {
+      "luck": 0,
+      "strength": 0,
+      "efficiency": 0
+    },
+    "guild": null
+  },
+  "7653112791353044082": {
+    "level": 1,
+    "exp": 40,
+    "coins": 885,
+    "rod": "basic",
+    "bait": null,
+    "area": "lake",
+    "stats": {
+      "common": 2,
+      "rare": 1,
+      "legendary": 1,
+      "trash": 0
+    },
+    "bag": [
+      {
+        "fish": "🐋 Cá Voi",
+        "rarity": "legendary",
+        "w": 1475,
+        "c": 295
+      },
+      {
+        "fish": "🐠 Cá Chép",
+        "rarity": "common",
+        "w": 1152,
+        "c": 230
+      },
+      {
+        "fish": "🐠 Cá Chép",
+        "rarity": "common",
+        "w": 785,
+        "c": 157
+      },
+      {
+        "fish": "🐙 Bạch Tuộc",
+        "rarity": "rare",
+        "w": 1018,
+        "c": 203
+      }
+    ],
+    "bossKills": 0,
+    "upgrades": {
+      "luck": 0,
+      "strength": 0,
+      "efficiency": 0
+    },
+    "guild": null
+  },
+  "321510482567921969": {
+    "level": 1,
+    "exp": 90,
+    "coins": 1391,
+    "rod": "basic",
+    "bait": null,
+    "area": "lake",
+    "stats": {
+      "common": 8,
+      "rare": 1,
+      "legendary": 0,
+      "trash": 0
+    },
+    "bag": [
+      {
+        "fish": "🐟 Cá Rô",
+        "rarity": "common",
+        "w": 400,
+        "c": 80
+      },
+      {
+        "fish": "🐟 Cá Rô",
+        "rarity": "common",
+        "w": 1065,
+        "c": 213
+      },
+      {
+        "fish": "🦐 Tôm Hùm",
+        "rarity": "rare",
+        "w": 1002,
+        "c": 200
+      },
+      {
+        "fish": "🐡 Cá Nóc",
+        "rarity": "common",
+        "w": 331,
+        "c": 66
+      },
+      {
+        "fish": "🐠 Cá Chép",
+        "rarity": "common",
+        "w": 608,
+        "c": 121
+      },
+      {
+        "fish": "🐡 Cá Nóc",
+        "rarity": "common",
+        "w": 969,
+        "c": 193
+      },
+      {
+        "fish": "🐟 Cá Rô",
+        "rarity": "common",
+        "w": 1665,
+        "c": 333
+      },
+      {
+        "fish": "🐠 Cá Chép",
+        "rarity": "common",
+        "w": 406,
+        "c": 81
+      },
+      {
+        "fish": "🐡 Cá Nóc",
+        "rarity": "common",
+        "w": 524,
+        "c": 104
+      }
+    ],
+    "bossKills": 0,
+    "upgrades": {
+      "luck": 0,
+      "strength": 0,
+      "efficiency": 0
+    },
+    "guild": null
+  },
+  "5050644971045364304": {
+    "level": 1,
+    "exp": 0,
+    "coins": 0,
+    "rod": "basic",
+    "bait": null,
+    "area": "lake",
+    "stats": {
+      "common": 0,
+      "rare": 0,
+      "legendary": 0,
+      "trash": 0
+    },
+    "bag": [],
+    "bossKills": 0,
+    "upgrades": {
+      "luck": 0,
+      "strength": 0,
+      "efficiency": 0
+    },
+    "guild": null
+  }
+}

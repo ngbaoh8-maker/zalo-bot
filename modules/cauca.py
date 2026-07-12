@@ -1,0 +1,2307 @@
+﻿# File: modules/cauca.py
+# Updated by ChatGPT — cải tiến: tăng tỉ lệ cá xịn theo cần câu, thêm lệnh train để lên level nhanh,
+# định dạng output theo yêu cầu, sửa 1 số lỗi và chuẩn hoá.
+from zlapi import ZaloAPI
+from zlapi.models import Message, Mention
+import json, os, random, math, time
+from zlapi.models import ThreadType
+import threading
+import datetime
+
+LAST_COMMAND_TIME = {}
+COMMAND_DELAY = 2  # giây
+TRIKY_FILE = "modules/cache/cauca_triky.json"
+os.makedirs("modules/cache", exist_ok=True)
+
+def load_triky():
+    try:
+        with open(TRIKY_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_triky(data):
+    with open(TRIKY_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+        
+ADMIN = "849987440929228204"  # UID admin của bạn
+# ======== GUILD SYSTEM ========
+GUILD_FILE = "modules/cache/cauca_guilds.json"
+AUTO_BOSS = {"enabled": False, "timer": None}
+   
+des = {
+    "version": "2.5.0",
+    "credits": "ngbao",
+    "description": "Game câu cá",
+    "power": "Thành Viên"
+}
+BOSS_EVENT = {"active": False, "name": None, "participants": {}, "thread": None}
+
+PET_SHOP = [
+    {"name": "Cáo Lửa", "type": "Hỏa", "buff": "Tăng tỉ lệ cá hiếm +10%", "value": 0.10},
+    {"name": "Rùa Nước", "type": "Thủy", "buff": "Giảm thời gian câu -5%", "value": 0.05},
+    {"name": "Rồng Băng", "type": "Băng", "buff": "Tăng tỉ lệ cá huyền thoại +20%", "value": 0.20},
+    {"name": "Chim Sét", "type": "Lôi", "buff": "Tăng 5% vàng nhận được", "value": 0.05},
+    {"name": "Mèo May Mắn", "type": "Phúc", "buff": "Tăng tỉ lệ vật phẩm quý hiếm +10%", "value": 0.10},
+    {"name": "Cá Tiên", "type": "Thần", "buff": "Tăng 15% cơ hội gặp boss cá", "value": 0.15},
+    {"name": "Sóc Gió", "type": "Phong", "buff": "Tăng 10% tốc độ câu", "value": 0.10},
+    {"name": "Cún Đá", "type": "Thổ", "buff": "Tăng phòng thủ boss +8%", "value": 0.08},
+    {"name": "Bướm Ánh Trăng", "type": "Ánh", "buff": "Tăng tỉ lệ cá đặc biệt +12%", "value": 0.12},
+    {"name": "Cá Mập Con", "type": "Thủy", "buff": "Tăng vàng câu được +10%", "value": 0.10},
+    {"name": "Khủng Long Con", "type": "Cổ", "buff": "Tăng 10% sát thương khi đánh boss", "value": 0.10},
+    {"name": "Hổ Trắng", "type": "Thú", "buff": "Tăng 15% tỉ lệ thắng boss", "value": 0.15},
+    {"name": "Cú Đêm", "type": "Bóng", "buff": "Tăng cơ hội gặp cá huyền bí +7%", "value": 0.07},
+    {"name": "Heo Đất", "type": "Tiền", "buff": "Tăng 20% vàng nhận được", "value": 0.20},
+    {"name": "Thỏ Sao", "type": "Tốc", "buff": "Giảm 10% thời gian hồi câu", "value": 0.10},
+    {"name": "Cá Bay", "type": "Phong", "buff": "Tăng 8% tỉ lệ cá siêu hiếm", "value": 0.08},
+    {"name": "Sư Tử Lửa", "type": "Hỏa", "buff": "Tăng 12% sát thương boss", "value": 0.12},
+    {"name": "Cá Voi Ánh Sáng", "type": "Thần", "buff": "Tăng 25% tỉ lệ cá huyền thoại", "value": 0.25},
+    {"name": "Kỳ Lân Con", "type": "Thần", "buff": "Tăng toàn bộ tỉ lệ +5%", "value": 0.05},
+    {"name": "Hạc Tiên", "type": "Thiêng", "buff": "Tăng 10% điểm kinh nghiệm", "value": 0.10}
+]
+PET_FILE = "data/pets.json"
+
+NAP_FILE = "modules/cache/cauca_nap.json"
+os.makedirs("modules/cache", exist_ok=True)
+
+def load_nap():
+    try:
+        with open(NAP_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_nap(data):
+    with open(NAP_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+        
+def load_pets():
+    try:
+        with open(PET_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_pets(data):
+    with open(PET_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+def extract_first_mention_id(message_object):
+    """
+    Trả về uid (string) của mention đầu tiên hoặc None nếu không có.
+    Hỗ trợ nhiều dạng: dict (uid->obj), list of Mention, list of dict, hoặc giá trị string/int.
+    """
+    mentions = getattr(message_object, "mentions", None)
+    if not mentions:
+        return None
+
+    # dict: keys là uid
+    if isinstance(mentions, dict):
+        for k in mentions.keys():
+            return str(k)
+        return None
+
+    # list/tuple: lấy phần tử đầu
+    if isinstance(mentions, (list, tuple)):
+        first = mentions[0]
+        # đối tượng mention có attribute user_id hoặc uid
+        if hasattr(first, "user_id"):
+            return str(first.user_id)
+        if hasattr(first, "uid"):
+            return str(first.uid)
+        # nếu phần tử là dict
+        if isinstance(first, dict):
+            for k in ("user_id", "uid", "id"):
+                if k in first:
+                    return str(first[k])
+            # fallback lấy value đầu tiên
+            for v in first.values():
+                return str(v)
+        # nếu phần tử là str/int
+        if isinstance(first, (str, int)):
+            return str(first)
+
+    # fallback: không tìm được
+    return None
+    
+def seconds_to_readable(sec):
+    days = int(sec // 86400)
+    hours = int((sec % 86400) // 3600)
+    minutes = int((sec % 3600) // 60)
+    if days > 0:
+        return f"{days} ngày {hours} giờ"
+    elif hours > 0:
+        return f"{hours} giờ {minutes} phút"
+    else:
+        return f"{minutes} phút"
+        
+BOSS_NAMES = [
+    # ======== BOSS THƯỜNG ========
+    "Cá Mập Đất 🦈", "Cá Chép Vàng 🐟", "Cá Trắm Đen 🐠",
+    "Cá Mè Đại Dương 🐡", "Cá Cơm Khổng Lồ 🐟", "Cá Ngừ Titan ⚓",
+    "Cá Heo Hung Dữ 🐬", "Cá Trích Bạc 💎", "Cá Kiếm Sắt ⚔️",
+    "Cá Sấu Sông Đen 🐊",
+
+    # ======== BOSS HIẾM ========
+    "Cá Voi Lam 🌊", "Cá Long Vương 🐉", "Cá Mập Bóng Tối 🌑",
+    "Cá Mặt Trăng 🌕", "Cá Thần Sông Nile 🏺", "Cá Mập Điện ⚡",
+    "Cá Mập Bạch Kim 💠", "Cá Mập Ruby 🔺", "Cá Mập Lửa 🔥",
+    "Cá Mập Băng ❄️",
+
+    # ======== BOSS SIÊU CẤP ========
+    "Cá Voi Vũ Trụ 🪐", "Cá Rồng Abyssal 🕳️", "Kraken Biển Sâu 🦑",
+    "Leviathan Bóng Đêm ⚓", "Cá Chúa Abyssal 🐉", "Thủy Quái Hỗn Mang 🌪️",
+    "Cá Mập Địa Ngục 👹", "Cá Mập Bóng Ma 💀", "Cá Mập Rồng 🐲",
+    "Cá Thần Biển Xanh 🌊",
+
+    # ======== BOSS HUYỀN THOẠI ========
+    "Thần Cá Vũ Trụ 🌌", "Long Ngư Vô Cực ♾️", "Rồng Nước Ngàn Năm 🐉",
+    "Cá Xác Sống 💀", "Cá Tiên Ánh Sáng ✨", "Thủy Quái Đen 🕳️",
+    "Hải Thần Poseidon 🔱", "Cá Lửa Địa Ngục 🔥", "Cá Bóng Tối 👁️",
+    "Cá Ánh Sáng 🌞",
+
+    # ======== BOSS THẦN THOẠI ========
+    "Cá Vĩnh Hằng ♾️", "Cá Ma Vương 👹", "Cá Rồng Thần 👑",
+    "Cá Phượng Hoàng 🔥", "Cá Sấm Sét ⚡", "Cá Ngọc Long 💎",
+    "Cá Rồng Bóng Tối 🐉🌑", "Cá Mập Hoàng Kim 👑🦈", "Cá Bão Tố ⛈️",
+    "Cá Bạch Kim Vô Tận 💠",
+
+    # ======== BOSS TỐI THƯỢNG ========
+    "Cá Thần Thoại Vô Cực 🌌♾️", "Cá Ngọc Hoàng 👑🐟", "Cá Thiên Sứ 👼",
+    "Cá Quỷ Dữ 💀🔥", "Cá Abyss Hắc Ám 🕳️", "Cá Hỗn Nguyên 🔮",
+    "Cá Rồng Lửa Hủy Diệt 🔥🐉", "Cá Ma Bóng Tối 😈", "Cá Hủy Diệt Vũ Trụ 🌠",
+    "Cá Ngư Thần Hỗn Chiến 👑🐲"
+]
+
+DATA_FILE = "modules/cache/cauca_data.json"
+os.makedirs("modules/cache", exist_ok=True)
+
+HO_CAU = [
+    {"ten": "Hồ Bình Minh 🌅", "yeu_cau": 1, "buff": 1.0},
+    {"ten": "Hồ Ánh Trăng 🌕", "yeu_cau": 15, "buff": 1.2},
+    {"ten": "Sông Mekong 🏞️", "yeu_cau": 35, "buff": 1.4},
+    {"ten": "Biển Phú Quốc 🐚", "yeu_cau": 60, "buff": 1.6},
+    {"ten": "Vịnh Hạ Long ⛵", "yeu_cau": 120, "buff": 1.8},
+    {"ten": "Hồ Tuyệt Tình 💞", "yeu_cau": 185, "buff": 2.0},
+    {"ten": "Đầm Rồng 🐉", "yeu_cau": 250, "buff": 2.2},
+    {"ten": "Biển Sâu Abyss ⚓", "yeu_cau": 325, "buff": 2.5},
+    {"ten": "Hồ Huyền Thoại 🪸", "yeu_cau": 400, "buff": 2.8},
+    {"ten": "Hồ Vô Cực ∞", "yeu_cau": 500, "buff": 3.0},
+    {"ten": "Hồ Hách Thành 🏯", "yeu_cau": 1250, "buff": 10.0},
+    {"ten": "Hồ Hoạch Nhân ❤️", "yeu_cau": 2000, "buff": 15.0},
+    {"ten": "Hồ Vĩnh Hằng 🌸", "yeu_cau": 2500, "buff": 20.0},
+    {"ten": "Hồ Ánh Sáng 🌅", "yeu_cau": 3000, "buff": 25.0},
+    {"ten": "Hồ Mặt Trời 🌕", "yeu_cau": 3750, "buff": 35.0}
+]
+
+CAN_CAU = [
+
+    # ======== CƠ BẢN ========
+    {"ten": "Cần Tre 🎍", "luck": 1.0, "exp": 1.0, "coin": 1.0, "rare": 1.0, "lv": 1, "gia": 0},
+    {"ten": "Cần Tre Xịn 🎋", "luck": 1.2, "exp": 1.1, "coin": 1.1, "rare": 1.2, "lv": 2, "gia": 200},
+    {"ten": "Cần Sắt ⚙️", "luck": 1.4, "exp": 1.2, "coin": 1.2, "rare": 1.3, "lv": 3, "gia": 500},
+    {"ten": "Cần Titan 🧲", "luck": 1.6, "exp": 1.3, "coin": 1.3, "rare": 1.5, "lv": 4, "gia": 1200},
+    {"ten": "Cần Bạc 💎", "luck": 1.8, "exp": 1.4, "coin": 1.5, "rare": 1.6, "lv": 5, "gia": 3000},
+    {"ten": "Cần Vàng 🪙", "luck": 2.0, "exp": 1.6, "coin": 1.7, "rare": 1.8, "lv": 6, "gia": 7000},
+    {"ten": "Cần Bạch Kim 🧧", "luck": 2.2, "exp": 1.7, "coin": 1.8, "rare": 2.0, "lv": 7, "gia": 15000},
+    {"ten": "Cần Kim Cương 💠", "luck": 2.4, "exp": 1.8, "coin": 1.9, "rare": 2.2, "lv": 8, "gia": 35000},
+    {"ten": "Cần Ruby 🔺", "luck": 2.6, "exp": 2.0, "coin": 2.0, "rare": 2.4, "lv": 9, "gia": 80000},
+    {"ten": "Cần Ngọc Lục Bảo 💚", "luck": 2.8, "exp": 2.2, "coin": 2.2, "rare": 2.6, "lv": 10, "gia": 160000},
+
+    # ======== TRUNG CẤP ========
+    {"ten": "Cần Sapphire 🔷", "luck": 3.0, "exp": 2.4, "coin": 2.4, "rare": 2.8, "lv": 12, "gia": 300000},
+    {"ten": "Cần Rồng 🐉", "luck": 3.2, "exp": 2.6, "coin": 2.6, "rare": 3.0, "lv": 14, "gia": 600000},
+    {"ten": "Cần Hồ Quang ⚡", "luck": 3.5, "exp": 3.0, "coin": 3.0, "rare": 3.2, "lv": 16, "gia": 1200000},
+    {"ten": "Cần Sấm Sét ⚡", "luck": 3.8, "exp": 3.4, "coin": 3.4, "rare": 3.6, "lv": 18, "gia": 3000000},
+    {"ten": "Cần Thần Thoại 🔱", "luck": 4.2, "exp": 3.8, "coin": 3.8, "rare": 4.0, "lv": 20, "gia": 8000000},
+    {"ten": "Cần Vũ Trụ 🪐", "luck": 4.5, "exp": 4.0, "coin": 4.0, "rare": 4.2, "lv": 22, "gia": 10000000},
+    {"ten": "Cần Ánh Sáng ✨", "luck": 4.8, "exp": 4.2, "coin": 4.2, "rare": 4.4, "lv": 24, "gia": 15000000},
+    {"ten": "Cần Bóng Tối 🌑", "luck": 5.0, "exp": 4.5, "coin": 4.5, "rare": 4.8, "lv": 26, "gia": 18000000},
+    {"ten": "Cần Huyền Bí 🌀", "luck": 5.5, "exp": 5.0, "coin": 5.0, "rare": 5.5, "lv": 28, "gia": 25000000},
+    {"ten": "Cần Vô Cực ∞", "luck": 6.0, "exp": 5.5, "coin": 5.5, "rare": 6.0, "lv": 30, "gia": 30000000},
+
+    # ======== CAO CẤP ========
+    {"ten": "Cần Long Thần 🐲", "luck": 6.5, "exp": 6.0, "coin": 6.0, "rare": 6.4, "lv": 35, "gia": 40000000},
+    {"ten": "Cần Phượng Hoàng 🔥", "luck": 7.0, "exp": 6.2, "coin": 6.2, "rare": 6.8, "lv": 40, "gia": 60000000},
+    {"ten": "Cần Địa Ngục 😈", "luck": 7.5, "exp": 6.6, "coin": 6.6, "rare": 7.0, "lv": 45, "gia": 80000000},
+    {"ten": "Cần Thiên Sứ 👼", "luck": 8.0, "exp": 7.0, "coin": 7.0, "rare": 7.5, "lv": 50, "gia": 100000000},
+    {"ten": "Cần Ma Vương 👹", "luck": 8.5, "exp": 7.5, "coin": 7.5, "rare": 8.0, "lv": 60, "gia": 120000000},
+    {"ten": "Cần Băng Giá ❄️", "luck": 9.0, "exp": 8.0, "coin": 8.0, "rare": 8.4, "lv": 70, "gia": 150000000},
+    {"ten": "Cần Dung Nham 🌋", "luck": 9.5, "exp": 8.5, "coin": 8.5, "rare": 8.8, "lv": 80, "gia": 180000000},
+    {"ten": "Cần Ánh Trăng 🌕", "luck": 10.0, "exp": 9.0, "coin": 9.0, "rare": 9.2, "lv": 90, "gia": 200000000},
+    {"ten": "Cần Hỗn Độn 🌀", "luck": 10.5, "exp": 9.5, "coin": 9.5, "rare": 9.5, "lv": 100, "gia": 250000000},
+    {"ten": "Cần Thời Gian ⏳", "luck": 11.0, "exp": 10.0, "coin": 10.0, "rare": 10.0, "lv": 120, "gia": 300000000},
+
+    # ======== HUYỀN THOẠI ========
+    {"ten": "Cần Rồng Lửa 🔥🐉", "luck": 11.5, "exp": 10.5, "coin": 10.5, "rare": 10.4, "lv": 150, "gia": 350000000},
+    {"ten": "Cần Bão Tố ⛈️", "luck": 12.0, "exp": 11.0, "coin": 11.0, "rare": 10.8, "lv": 180, "gia": 400000000},
+    {"ten": "Cần Hải Vương 🌊", "luck": 12.5, "exp": 11.5, "coin": 11.5, "rare": 11.2, "lv": 200, "gia": 450000000},
+    {"ten": "Cần Tinh Vân 🌌", "luck": 13.0, "exp": 12.0, "coin": 12.0, "rare": 11.6, "lv": 220, "gia": 500000000},
+    {"ten": "Cần Vĩnh Hằng ♾️", "luck": 13.5, "exp": 12.5, "coin": 12.5, "rare": 12.0, "lv": 250, "gia": 600000000},
+    {"ten": "Cần Thánh Linh ✝️", "luck": 14.0, "exp": 13.0, "coin": 13.0, "rare": 12.5, "lv": 300, "gia": 700000000},
+    {"ten": "Cần Abyssal 🕳️", "luck": 14.5, "exp": 13.5, "coin": 13.5, "rare": 13.0, "lv": 350, "gia": 800000000},
+    {"ten": "Cần Ác Mộng 💀", "luck": 15.0, "exp": 14.0, "coin": 14.0, "rare": 13.5, "lv": 400, "gia": 900000000},
+    {"ten": "Cần Tối Thượng 👑", "luck": 16.0, "exp": 15.0, "coin": 15.0, "rare": 14.0, "lv": 500, "gia": 1000000000},
+    {"ten": "Cần Vô Địch 💫", "luck": 18.0, "exp": 17.0, "coin": 17.0, "rare": 16.0, "lv": 750, "gia": 3000000000},
+
+    # ======== CỰC PHẨM / THẦN THOẠI ========
+    {"ten": "Cần Hỗn Nguyên 🔮", "luck": 20.0, "exp": 18.0, "coin": 18.0, "rare": 17.0, "lv": 1000, "gia": 10000000000},
+    {"ten": "Cần Long Ngư 👑🐉", "luck": 25.0, "exp": 20.0, "coin": 20.0, "rare": 20.0, "lv": 2000, "gia": 100000000000},
+    {"ten": "Cần Vô Cực Tối Thượng ∞🔥", "luck": 30.0, "exp": 25.0, "coin": 25.0, "rare": 25.0, "lv": 3000, "gia": 500000000000},
+    {"ten": "Cần Rồng Lửa Hủy Diệt 👹🔥", "luck": 40.0, "exp": 30.0, "coin": 30.0, "rare": 30.0, "lv": 5000, "gia": 1000000000000},
+    {"ten": "Cần Vũ Trụ Vĩnh Hằng 🌌♾️", "luck": 50.0, "exp": 40.0, "coin": 40.0, "rare": 40.0, "lv": 10000, "gia": 9999999999999},
+
+    # ======== SIÊU TỐI THƯỢNG ========
+    {"ten": "Cần Hắc Ám Tối Hậu 🕳️", "luck": 60.0, "exp": 45.0, "coin": 45.0, "rare": 45.0, "lv": 15000, "gia": 99999999999999},
+    {"ten": "Cần Ánh Sáng Vô Biên ✨", "luck": 70.0, "exp": 50.0, "coin": 50.0, "rare": 50.0, "lv": 20000, "gia": 199999999999999},
+    {"ten": "Cần Thần Ngư Đại Đế 👑🐉", "luck": 100.0, "exp": 100.0, "coin": 100.0, "rare": 100.0, "lv": 99999, "gia": 9999999999999999}
+]
+
+MOI_LIST = [
+    {"name": "Giun đất 🪱", "bonus": 1.0},
+    {"name": "Bánh mì 🍞", "bonus": 1.1},
+    {"name": "Cá khô 🐟", "bonus": 1.2},
+    {"name": "Mồi tôm 🦐", "bonus": 1.3},
+    {"name": "Mồi cá nhỏ 🐠", "bonus": 1.4},
+    {"name": "Mồi hải sản 🦑", "bonus": 1.6},
+    {"name": "Mồi huyền thoại 🧿", "bonus": 2.0}
+] + [{"name": f"Mồi đặc biệt #{i} 🎯", "bonus": 1 + i * 0.05} for i in range(7, 35)]
+
+RARITY_RATE = {
+    "Thường": 60,
+    "Hiếm": 25,
+    "Cực hiếm": 10,
+    "Truyền thuyết": 4,
+    "Thần thoại": 1
+}
+
+FISH_LIST = [
+
+# ======== THƯỜNG (60) ========
+{"name": "Cá Rô 🐟", "rarity": "Thường", "emoji": "🐟", "exp": 20, "coins": 10},
+{"name": "Cá Lóc 🐠", "rarity": "Thường", "emoji": "🐠", "exp": 25, "coins": 15},
+{"name": "Cá Trê 🐡", "rarity": "Thường", "emoji": "🐡", "exp": 30, "coins": 20},
+{"name": "Cá Chép 🐟", "rarity": "Thường", "emoji": "🐟", "exp": 35, "coins": 25},
+{"name": "Cá Nóc 😳", "rarity": "Thường", "emoji": "🐡", "exp": 40, "coins": 30},
+{"name": "Cá Cơm 🐠", "rarity": "Thường", "emoji": "🐠", "exp": 18, "coins": 8},
+{"name": "Cá Ngừ 🐟", "rarity": "Thường", "emoji": "🐟", "exp": 45, "coins": 40},
+{"name": "Cá Trích 🐠", "rarity": "Thường", "emoji": "🐠", "exp": 28, "coins": 18},
+{"name": "Cá Mòi 🐟", "rarity": "Thường", "emoji": "🐟", "exp": 22, "coins": 12},
+{"name": "Cá Diếc 🐟", "rarity": "Thường", "emoji": "🐟", "exp": 30, "coins": 15},
+{"name": "Cá Bống 🐟", "rarity": "Thường", "emoji": "🐟", "exp": 25, "coins": 12},
+{"name": "Cá Dìa 🐠", "rarity": "Thường", "emoji": "🐠", "exp": 35, "coins": 20},
+{"name": "Cá Linh 🐟", "rarity": "Thường", "emoji": "🐟", "exp": 30, "coins": 18},
+{"name": "Cá Cờ 🐟", "rarity": "Thường", "emoji": "🐟", "exp": 32, "coins": 25},
+{"name": "Cá Đuối 🐠", "rarity": "Thường", "emoji": "🐠", "exp": 35, "coins": 30},
+{"name": "Cá Hồi 🐟", "rarity": "Thường", "emoji": "🐟", "exp": 40, "coins": 40},
+{"name": "Cá Thu 🐠", "rarity": "Thường", "emoji": "🐠", "exp": 42, "coins": 38},
+{"name": "Cá Tráp 🐡", "rarity": "Thường", "emoji": "🐡", "exp": 45, "coins": 35},
+{"name": "Cá Măng 🐟", "rarity": "Thường", "emoji": "🐟", "exp": 48, "coins": 40},
+{"name": "Cá Chim 🐠", "rarity": "Thường", "emoji": "🐠", "exp": 50, "coins": 45},
+{"name": "Cá Đen 🐠", "rarity": "Thường", "emoji": "🐠", "exp": 25, "coins": 20},
+{"name": "Cá Bạc 🐟", "rarity": "Thường", "emoji": "🐟", "exp": 35, "coins": 30},
+{"name": "Cá Mè 🐠", "rarity": "Thường", "emoji": "🐠", "exp": 30, "coins": 20},
+{"name": "Cá Rô Phi 🐟", "rarity": "Thường", "emoji": "🐟", "exp": 35, "coins": 25},
+{"name": "Cá Đuôi Én 🐠", "rarity": "Thường", "emoji": "🐠", "exp": 38, "coins": 28},
+{"name": "Cá Bống Vàng 🐟", "rarity": "Thường", "emoji": "🐟", "exp": 40, "coins": 35},
+{"name": "Cá Bơn 🐠", "rarity": "Thường", "emoji": "🐠", "exp": 33, "coins": 26},
+{"name": "Cá Lù 🐟", "rarity": "Thường", "emoji": "🐟", "exp": 31, "coins": 21},
+{"name": "Cá Nhồng 🐠", "rarity": "Thường", "emoji": "🐠", "exp": 34, "coins": 29},
+{"name": "Cá Kình 🐟", "rarity": "Thường", "emoji": "🐟", "exp": 30, "coins": 27},
+{"name": "Cá Cơm Trắng 🐠", "rarity": "Thường", "emoji": "🐠", "exp": 24, "coins": 16},
+{"name": "Cá Mập Mini 🦈", "rarity": "Thường", "emoji": "🦈", "exp": 50, "coins": 45},
+{"name": "Cá Chuồn 🐟", "rarity": "Thường", "emoji": "🐟", "exp": 42, "coins": 35},
+{"name": "Cá Đuôi Đỏ 🐠", "rarity": "Thường", "emoji": "🐠", "exp": 28, "coins": 24},
+{"name": "Cá Cát 🐟", "rarity": "Thường", "emoji": "🐟", "exp": 22, "coins": 12},
+{"name": "Cá Bạc Phong 🐠", "rarity": "Thường", "emoji": "🐠", "exp": 38, "coins": 28},
+{"name": "Cá Lửa Nhỏ 🔥", "rarity": "Thường", "emoji": "🔥", "exp": 45, "coins": 40},
+{"name": "Cá Nước Ngọt 💧", "rarity": "Thường", "emoji": "💧", "exp": 30, "coins": 25},
+{"name": "Cá Đá 🪨", "rarity": "Thường", "emoji": "🪨", "exp": 20, "coins": 15},
+
+# ======== HIẾM (40) ========
+{"name": "Cá Chép Vàng 🐠", "rarity": "Hiếm", "emoji": "🐠", "exp": 80, "coins": 70},
+{"name": "Cá Hổ Vằn 🐯", "rarity": "Hiếm", "emoji": "🐟", "exp": 90, "coins": 80},
+{"name": "Cá Cảnh Nhật 🐠", "rarity": "Hiếm", "emoji": "🐠", "exp": 100, "coins": 90},
+{"name": "Cá Lăng Khủng 🦈", "rarity": "Hiếm", "emoji": "🦈", "exp": 120, "coins": 110},
+{"name": "Cá Hề Nemo 🎭", "rarity": "Hiếm", "emoji": "🐠", "exp": 95, "coins": 85},
+{"name": "Cá Cầu Vồng 🌈", "rarity": "Hiếm", "emoji": "🌈", "exp": 110, "coins": 100},
+{"name": "Cá Sư Tử 🦁", "rarity": "Hiếm", "emoji": "🦁", "exp": 115, "coins": 105},
+{"name": "Cá Đuối Điện ⚡", "rarity": "Hiếm", "emoji": "⚡", "exp": 120, "coins": 120},
+{"name": "Cá Gấm 🌺", "rarity": "Hiếm", "emoji": "🌺", "exp": 130, "coins": 140},
+{"name": "Cá Đá Quý 💎", "rarity": "Hiếm", "emoji": "💎", "exp": 140, "coins": 160},
+
+# ======== SIÊU HIẾM (30) ========
+{"name": "Cá Mập Trắng 🦈", "rarity": "Siêu hiếm", "emoji": "🦈", "exp": 250, "coins": 220},
+{"name": "Cá Voi Xanh 🐋", "rarity": "Siêu hiếm", "emoji": "🐋", "exp": 280, "coins": 250},
+{"name": "Cá Ngọc Lam 💎", "rarity": "Siêu hiếm", "emoji": "💎", "exp": 300, "coins": 260},
+{"name": "Cá Điện Sấm ⚡", "rarity": "Siêu hiếm", "emoji": "⚡", "exp": 350, "coins": 300},
+{"name": "Cá Phượng Hoàng 🔥", "rarity": "Siêu hiếm", "emoji": "🔥", "exp": 400, "coins": 350},
+
+# ======== HUYỀN THOẠI (25) ========
+{"name": "Rồng Nước 🐉", "rarity": "Huyền thoại", "emoji": "🐉", "exp": 1200, "coins": 2000},
+{"name": "Cá Leviathan ⚓", "rarity": "Huyền thoại", "emoji": "⚓", "exp": 1500, "coins": 3000},
+{"name": "Cá Sấm Sét ⚡", "rarity": "Huyền thoại", "emoji": "⚡", "exp": 1700, "coins": 3500},
+{"name": "Cá Địa Ngục 👹", "rarity": "Huyền thoại", "emoji": "👹", "exp": 1900, "coins": 4000},
+{"name": "Cá Lửa Vĩnh Hằng 🔥", "rarity": "Huyền thoại", "emoji": "🔥", "exp": 2200, "coins": 4500},
+
+# ======== SIÊU HUYỀN THOẠI (15) ========
+{"name": "Cá Lửa 🔥", "rarity": "Siêu huyền thoại", "emoji": "🔥", "exp": 2500, "coins": 6000},
+{"name": "Cá Băng ❄️", "rarity": "Siêu huyền thoại", "emoji": "❄️", "exp": 2700, "coins": 7000},
+{"name": "Rồng Biển Huyền Ảo 🐉", "rarity": "Siêu huyền thoại", "emoji": "🐉", "exp": 3000, "coins": 9000},
+{"name": "Cá Sét Nguyên Tố ⚡", "rarity": "Siêu huyền thoại", "emoji": "⚡", "exp": 3500, "coins": 10000},
+
+# ======== VÔ CỰC (10) ========
+{"name": "Cá Vũ Trụ 🌌", "rarity": "Vô cực", "emoji": "🌌", "exp": 5000, "coins": 15000},
+{"name": "Cá Hắc Ám 🕳️", "rarity": "Vô cực", "emoji": "🕳️", "exp": 6000, "coins": 20000},
+{"name": "Cá Ánh Sáng ✨", "rarity": "Vô cực", "emoji": "✨", "exp": 7000, "coins": 25000},
+{"name": "Cá Tứ Đại Nguyên Tố 🌪️", "rarity": "Vô cực", "emoji": "🌪️", "exp": 8500, "coins": 30000},
+{"name": "Cá Thời Gian ⏳", "rarity": "Vô cực", "emoji": "⏳", "exp": 10000, "coins": 40000},
+
+# ======== CỰC PHẨM (10) ========
+{"name": "Long Ngư Tối Thượng 👑", "rarity": "Cực phẩm", "emoji": "👑", "exp": 10000, "coins": 50000},
+{"name": "Thủy Thần Abyssal 🌀", "rarity": "Cực phẩm", "emoji": "🌀", "exp": 12000, "coins": 80000},
+{"name": "Cá Thời Gian ⏳", "rarity": "Cực phẩm", "emoji": "⏳", "exp": 15000, "coins": 100000},
+{"name": "Cá Vĩnh Hằng ♾️", "rarity": "Cực phẩm", "emoji": "♾️", "exp": 20000, "coins": 150000},
+{"name": "Cá Thánh Ngư ✝️", "rarity": "Cực phẩm", "emoji": "✝️", "exp": 30000, "coins": 200000},
+{"name": "Cá Thánh Thoại 👹", "rarity": "Thần Thánh", "emoji": "👹", "exp": 3000000, "coins": 50000000},
+{"name": "Ngư Vương Đại Đế 👑", "rarity": "Thần Thánh", "emoji": "👑", "exp": 9999999, "coins": 99999999}
+
+]
+
+
+# -----------------------
+# Persistence
+# -----------------------
+
+def get_pet_buff(user_id, buff_type=None):
+    try:
+        with open("data/pets.json", "r", encoding="utf-8") as f:
+            pets = json.load(f)
+        if user_id not in pets or not pets[user_id]["list"]:
+            return 0.0
+
+        # Dùng pet đầu tiên làm pet chính (hoặc bạn có thể thêm active_pet sau)
+        pet_name, info = list(pets[user_id]["list"].items())[0]
+        value = info.get("buff_value", 0.0)
+        return value
+    except:
+        return 0.0
+        
+def load_data():
+    if not os.path.exists(DATA_FILE):
+        return {}
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        try:
+            return json.load(f)
+        except Exception:
+            return {}
+
+
+def save_data(data):
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+# -----------------------
+# Player (migrate nếu cần)
+# -----------------------
+def load_guilds():
+    try:
+        if not os.path.exists(GUILD_FILE):
+            return {}
+        with open(GUILD_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_guilds(guilds):
+    with open(GUILD_FILE, "w", encoding="utf-8") as f:
+        json.dump(guilds, f, indent=2, ensure_ascii=False)
+
+def gen_guild_uid():
+    # UID đơn giản: timestamp + random
+    return f"G{int(time.time())}{random.randint(10,99)}"
+
+def get_player_guild(guilds, user_id):
+    # trả về (guild_uid, guild_obj) hoặc (None, None)
+    for gid, g in guilds.items():
+        if str(user_id) in g.get("members", {}):
+            return gid, g
+    return None, None
+    
+def schedule_auto_boss(client, thread_id, thread_type):
+    if not AUTO_BOSS["enabled"]:
+        return
+    now = datetime.datetime.now()
+    next_half_hour = now.replace(minute=30, second=0, microsecond=0)
+    if now.minute >= 30:
+        next_half_hour += datetime.timedelta(hours=1)
+    delay = (next_half_hour - now).total_seconds()
+
+    def trigger():
+        if AUTO_BOSS["enabled"]:
+            if not BOSS_EVENT["active"]:
+                boss = random.choice(BOSS_NAMES)
+                BOSS_EVENT["active"] = True
+                BOSS_EVENT["name"] = boss
+                BOSS_EVENT["participants"] = {}
+
+                text = (
+                    f"⚔️ Boss xuất hiện! ⚔️\n\n"
+                    f"🐉 Boss: {boss}\n"
+                    f"👹 Các ngươi giám tham chiến thì đừng hối hận khi mất hết đồ nha!\n\n"
+                    f"📅 Thời gian săn: 1 phút\n\n"
+                    f"💥 Dùng lệnh `,cauca danhboss` để tham chiến!\n"
+                )
+                client.sendMessage(Message(text=text), thread_id, thread_type)
+
+                t = threading.Timer(60.0, end_boss_event, args=(client, thread_id, thread_type))
+                BOSS_EVENT["thread"] = t
+                t.start()
+            schedule_auto_boss(client, thread_id, thread_type)
+
+    AUTO_BOSS["timer"] = threading.Timer(delay, trigger)
+    AUTO_BOSS["timer"].start()
+    
+def get_daily_triky_buff():
+    # Mỗi ngày buff khác nhau
+    buffs = [
+        ("💖 Cộng thêm 10% exp khi câu cá cùng nhau!", 0.10),
+        ("💰 Tăng 15% coin khi cùng online!", 0.15),
+        ("🎯 Tăng 5% tỉ lệ cá hiếm!", 0.05),
+        ("🐾 Pet của bạn mạnh hơn 8% hôm nay!", 0.08),
+        ("🌈 Tăng 12% điểm train exp!", 0.12),
+        ("🔥 Giảm 10% cooldown giữa các lệnh!", 0.10),
+        ("🌊 Tăng 20% cơ hội gặp boss cá!", 0.20),
+    ]
+    idx = datetime.datetime.now().day % len(buffs)
+    return buffs[idx]
+    
+def get_player(data, uid, name):
+    uid = str(uid)
+    if uid not in data:
+        data[uid] = {
+            "name": name,
+            "level": 1,
+            "exp": 0,
+            "coins": 0,
+            "rods": [0],
+            "current_rod": 0,
+            "bait": [],
+            "fish": [],
+            "spot": 0
+        }
+        save_data(data)
+        return data[uid]
+
+    user = data[uid]
+    changed = False
+
+    if "can" in user and "rods" not in user:
+        try:
+            idx = int(user.get("can", 0))
+            user["rods"] = [idx]
+            user["current_rod"] = idx
+        except Exception:
+            user["rods"] = [0]
+            user["current_rod"] = 0
+        del user["can"]
+        changed = True
+
+    if "ca" in user and "fish" not in user:
+        user["fish"] = user.get("ca", [])
+        del user["ca"]
+        changed = True
+
+    if "rods" not in user:
+        user["rods"] = [user.get("current_rod", 0)]
+        changed = True
+    if "current_rod" not in user:
+        user["current_rod"] = user["rods"][0] if user["rods"] else 0
+        changed = True
+    if "fish" not in user:
+        user["fish"] = []
+        changed = True
+    if "spot" not in user:
+        user["spot"] = 0
+        changed = True
+    if "coins" not in user:
+        user["coins"] = 0
+        changed = True
+    if "level" not in user:
+        user["level"] = 1
+        changed = True
+    if "exp" not in user:
+        user["exp"] = 0
+        changed = True
+
+    if changed:
+        data[uid] = user
+        save_data(data)
+    return user
+
+# -----------------------
+# Utilities
+# -----------------------
+
+def end_boss_event(client, thread_id, thread_type):
+    """Kết thúc sự kiện Boss sau 1 phút"""
+    global BOSS_EVENT
+    if not BOSS_EVENT["active"]:
+        return
+
+    boss_name = BOSS_EVENT["name"]
+    participants = BOSS_EVENT["participants"]
+
+    if not participants:
+        client.replyMessage(
+            Message(text=f"⚔️ Boss {boss_name} đã biến mất vì không ai tham chiến... 💤"),
+            None, thread_id, thread_type
+        )
+        BOSS_EVENT = {"active": False, "name": "", "participants": {}, "thread": None}
+        return
+
+    # Random điểm tấn công cho mỗi người
+    results = []
+    for uid, name in participants.items():
+        damage = random.randint(100, 10000)
+        results.append((name, uid, damage))
+
+    # Xếp hạng theo damage
+    results.sort(key=lambda x: x[2], reverse=True)
+
+    # Phân thưởng
+    rewards_text = "🎁 KẾT QUẢ SĂN BOSS 🎁\n\n"
+    rewards_text += f"🐉 Boss: {boss_name}\n"
+    rewards_text += f"👥 Tổng người tham chiến: {len(results)}\n\n"
+
+    # Gán thưởng theo thứ hạng
+    for i, (name, uid, damage) in enumerate(results[:15], start=1):
+        # thưởng theo top
+        if i == 1:
+            coins = 20000
+            exp = 5000
+        elif i == 2:
+            coins = 15000
+            exp = 4000
+        elif i == 3:
+            coins = 10000
+            exp = 3500
+        elif 4 <= i <= 5:
+            coins = 8000
+            exp = 3000
+        elif 6 <= i <= 10:
+            coins = 5000
+            exp = 2000
+        else:
+            coins = 3000
+            exp = 1500
+
+        # thêm exp + coin cho người chơi nếu có trong data
+        try:
+            data = load_data()
+            player = data.get(str(uid))
+            if player:
+                player["coins"] += coins
+                player["exp"] += exp
+                save_data(data)
+        except Exception:
+            pass
+
+        rewards_text += f"🏅 TOP {i}: {name}\n💥 Damage: {damage}\n💰 +{coins} coins | ⭐ +{exp} exp\n\n"
+
+    rewards_text += "🎉 Chúc mừng các thợ săn vĩ đại đã đánh bại Boss!\n"
+
+    client.sendMessage(Message(text=rewards_text), thread_id, thread_type)
+
+    # Reset sự kiện
+    BOSS_EVENT = {"active": False, "name": "", "participants": {}, "thread": None}
+    
+# -----------------------
+# AUTOFARM
+# -----------------------
+AUTOFARM_FILE = "modules/cache/cauca_autofarm.json"
+AUTOFARMS = {}  # format: { thread_id: { user_id: {"thread": Thread obj, "running": True/False, "last": timestamp} } }
+
+def load_autofarms():
+    try:
+        with open(AUTOFARM_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_autofarms(data):
+    with open(AUTOFARM_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+# khởi tạo từ file khi load module
+_persisted_autofarms = load_autofarms()
+
+def start_autofarm_for(client, thread_id, thread_type, target_uid, author_id):
+    tid = str(thread_id)
+    uid = str(target_uid)
+
+    if tid not in AUTOFARMS:
+        AUTOFARMS[tid] = {}
+    if uid in AUTOFARMS[tid] and AUTOFARMS[tid][uid].get("running"):
+        return False  # đã chạy
+
+    stop_flag = {"running": True}
+
+    def loop():
+        print(f"[AUTOFARM] Start for UID {uid} in thread {tid}")
+        while stop_flag["running"]:
+            try:
+                # Random delay giữa các lần farm (giả lập người thật)
+                delay = random.randint(8, 20)
+                time.sleep(delay)
+
+                # Thực hiện 1 lần câu cá cho user
+                perform_fish_for(client, thread_id, thread_type, uid, silent=True)
+
+                # Log ra console
+                print("[DEBUG] User data keys:", list(user.keys()))
+                print(f"[AUTOFARM] {uid} farmed 1 time.")
+
+            except Exception as e:
+                print(f"[AUTOFARM ERR] uid {uid} in {tid}: {e}")
+                break
+
+        print(f"[AUTOFARM] Stop for UID {uid} in thread {tid}")
+
+        # cập nhật lưu file
+        try:
+            persisted = load_autofarms()
+            if tid in persisted and uid in persisted[tid]:
+                persisted[tid].pop(uid, None)
+                if not persisted[tid]:
+                    persisted.pop(tid, None)
+                save_autofarms(persisted)
+        except:
+            pass
+
+    t = threading.Thread(target=loop, daemon=True)
+    AUTOFARMS[tid][uid] = {"thread": t, "running": True, "stop_flag": stop_flag}
+    persisted = load_autofarms()
+    persisted.setdefault(tid, {})[uid] = {"enabled": True, "by": str(author_id), "since": time.time()}
+    save_autofarms(persisted)
+    t.start()
+    return True
+
+def perform_fish_for(client, thread_id, thread_type, user_id, message_object=None, silent=False):
+    """
+    Thực hiện 1 lần câu cá thật cho user_id (dùng được cho autofarm).
+    Nếu silent=True thì không gửi tin nhắn ra box.
+    """
+    try:
+        data = load_data()
+        user_id = str(user_id)
+
+        if user_id not in data:
+            return
+
+        user = data[user_id]
+
+        # Tùy thuộc code cũ của bạn, ở đây đặt lại logic random cá / tiền / exp
+        fish_name = random.choice(["🐟 Cá cơm", "🐠 Cá ngừ", "🐡 Cá nóc"])  # ví dụ
+        exp_gain = random.randint(5, 15)
+        money_gain = random.randint(100, 300)
+
+        # Cộng dồn dữ liệu
+        user["exp"] += exp_gain
+        user["money"] += money_gain
+        user["fishs"].append(fish_name)
+
+        # Tăng lever nếu đạt ngưỡng
+        if user["exp"] >= user["level"] * 100:
+            user["exp"] = 0
+            user["level"] += 1
+
+        save_data(data)
+
+        if not silent:
+            client.replyMessage(
+                Message(text=f"🎣 {user['name']} câu được {fish_name}! (+{exp_gain} exp, +{money_gain}$)"),
+                message_object,
+                thread_id,
+                thread_type,
+            )
+
+    except Exception as e:
+        print(f"[perform_fish_for] Error: {e}")    
+
+def stop_autofarm_for(thread_id, target_uid):
+    tid = str(thread_id)
+    uid = str(target_uid)
+    if tid in AUTOFARMS and uid in AUTOFARMS[tid]:
+        AUTOFARMS[tid][uid]["stop_flag"]["running"] = False
+        AUTOFARMS[tid][uid]["running"] = False
+        # thread là daemon, sẽ kết thúc sau sleep hiện tại
+        AUTOFARMS[tid].pop(uid, None)
+        if not AUTOFARMS[tid]:
+            AUTOFARMS.pop(tid, None)
+    # cập nhật persisted file
+    try:
+        persisted = load_autofarms()
+        if tid in persisted and uid in persisted[tid]:
+            persisted[tid].pop(uid, None)
+            if not persisted[tid]:
+                persisted.pop(tid, None)
+            save_autofarms(persisted)
+    except:
+        pass
+        
+def exp_to_next(level):
+    return 500 + (level - 1) * 350
+
+
+def choose_fish_by_rarity(rod_luck=1.0, spot_idx=0):
+    """
+    Chọn cá dựa theo độ hiếm, có xét đến độ may mắn của cần câu và cấp hồ.
+    Hồ cao cấp + cần xịn = tăng mạnh tỉ lệ cá hiếm / huyền thoại.
+    """
+
+    # ✅ Hệ số hồ
+    if 0 <= spot_idx < len(HO_CAU):
+        spot_buff = HO_CAU[spot_idx].get("buff", 1.0)
+    else:
+        spot_buff = 1.0
+
+    # ✅ Hệ số may mắn tổng hợp
+    total_luck = rod_luck * spot_buff
+
+    # ✅ Sao chép tỉ lệ gốc
+    base = RARITY_RATE.copy()
+    adjusted = {}
+
+    # Xếp hạng độ hiếm theo thứ tự từ thấp → cao
+    order = ["Thường", "Hiếm", "Cực hiếm", "Truyền thuyết", "Thần thoại"]
+
+    # ✅ Điều chỉnh tỉ lệ: hồ và cần càng mạnh → giảm trọng số "Thường", tăng trọng số cá hiếm
+    for i, r in enumerate(order):
+        # rarer = vị trí càng cao → càng hiếm
+        rarity_factor = 1 + (i * 0.5)
+
+        if r == "Thường":
+            # Giảm tỉ lệ cá thường khi luck cao
+            adjusted[r] = max(1, int(base[r] / total_luck))
+        else:
+            # Tăng tỉ lệ các loại hiếm hơn
+            adjusted[r] = max(1, int(base[r] * (total_luck ** (rarity_factor / 3))))
+
+    # ✅ Đảm bảo tổng trọng số > 0
+    total = sum(adjusted.values())
+    if total <= 0:
+        return random.choice(FISH_LIST)
+
+    # ✅ Random độ hiếm dựa theo tỉ lệ điều chỉnh
+    rarities = list(adjusted.keys())
+    weights = list(adjusted.values())
+    pick_rarity = random.choices(rarities, weights=weights, k=1)[0]
+
+    # ✅ Lọc cá theo độ hiếm
+    candidates = [f for f in FISH_LIST if f.get("rarity") == pick_rarity]
+    if not candidates:
+        return random.choice(FISH_LIST)
+
+    # ✅ Trả về cá ngẫu nhiên cùng độ hiếm
+    return random.choice(candidates)
+
+
+def handle_cauca_command(self, message, message_object, thread_id, thread_type, author_id):
+    import time
+    tokens = message.strip().split()
+    if len(tokens) == 0:
+        return
+    if not tokens[0].lower().startswith(",cauca"):
+        return
+
+    # Debug test
+    print("DEBUG replyMessage =", getattr(self, "replyMessage", None))
+    print("DEBUG sendMessage =", getattr(self, "sendMessage", None))
+    print("DEBUG reply_message_async =", getattr(self, "reply_message_async", None))
+
+    # ======== CHỐNG SPAM 2 GIÂY ========
+    now = time.time()
+    last = LAST_COMMAND_TIME.get(author_id, 0)
+    if now - last < COMMAND_DELAY:
+        wait = COMMAND_DELAY - (now - last)
+        self.sendMessage(
+            Message(text=f"⏳ Vui lòng chờ {wait:.1f}s trước khi dùng lệnh tiếp theo!"),
+            thread_id, thread_type
+        )
+        return
+    LAST_COMMAND_TIME[author_id] = now
+
+    data = load_data()
+
+    # Lấy tên người dùng
+    try:
+        user_info = self.fetchUserInfo(author_id).changed_profiles[author_id]
+        display_name = user_info.displayName
+    except Exception:
+        display_name = "Người chơi"
+
+    player = get_player(data, author_id, display_name)
+
+    # MENU
+    if len(tokens) == 1:
+        text = (
+            "🎣 Game câu cá 🎣\n\n"
+            "📘 ,cauca info              — Xem hồ sơ\n"
+            "🐠 ,cauca fish|cau          — Câu cá\n"
+            "🌊 ,cauca hocau             — Danh sách hồ\n"
+            "🚣 ,cauca goto <số>         — Di chuyển hồ\n"
+            "🛒 ,cauca shop [trang]      — Xem shop cần câu\n"
+            "💰 ,cauca mua <số>          — Mua item trong shop\n"
+            "🎯 ,cauca can               — Xem & trang bị cần\n"
+            "🐟 ,cauca sell all          — Bán toàn bộ cá\n"
+            "🏋️ ,cauca train [coins]     — Dùng coins để train exp\n"
+            "👑 ,cauca bxh               — BXH top 10 người chơi câu cá\n"
+            "💫 ,cauca buff <loại> <giá trị> [@tag]\n"
+            "💥 ,cauca rest              — Reset toàn bộ dữ liệu (admin)\n"
+        )
+        # Dùng sendMessage thay vì replyMessage
+        self.sendMessage(Message(text=text), thread_id, thread_type)
+        return
+
+
+    sub = tokens[1].lower()
+
+    if sub == "banggianap":
+        text = (
+            "💰 BẢNG GIÁ NẠP CÂU CÁ 💰\n\n"
+            "📦 1k = 50.000 coins\n"
+            "🎁 Mỗi lần nạp bạn sẽ nhận ngẫu nhiên 1 cần câu!\n\n"
+            "Ví dụ:\n"
+            "• ,cauca nap 10  → nạp 10k coin cho bản thân\n"
+            "• ,cauca nap 15 exp → nạp exp\n"
+            "• ,cauca nap 20 canvutru → nạp cần 'Cần Vũ Trụ'\n"
+            "• ,cauca nap 10 @tag → nạp cho người khác\n\n"
+            "🏆 Dùng ,cauca bxhnap để xem BXH nạp!"
+        )
+        self.reply_message_async(text, message_object, thread_id, thread_type)
+
+        return
+
+    if sub == "nap":
+        if len(tokens) < 3:
+            client.replyMessage(Message(text="💸 Dùng: ,cauca nap <số tiền> [coin|exp|<tên cần>] [@mention]"), message_object, thread_id, thread_type)
+            return
+
+        amount = 0
+        try:
+            amount = int(tokens[2])
+        except:
+            client.replyMessage(Message(text="⚠️ Số tiền phải là số (ví dụ ,cauca nap 10)."), message_object, thread_id, thread_type)
+            return
+
+        type_or_item = tokens[3].lower() if len(tokens) >= 4 else "coin"
+        target_id = extract_first_mention_id(message_object) or str(author_id)
+        nap_data = load_nap()
+        data = load_data()
+
+        # tìm người chơi
+        try:
+            user_info = client.fetchUserInfo(int(target_id)).changed_profiles[int(target_id)]
+            target_name = user_info.displayName
+        except:
+            target_name = "Người chơi"
+
+        player = get_player(data, target_id, target_name)
+
+        reward_value = amount * 50000  # 1k = 50k coin/exp
+        message_result = f"💳 {display_name} đã nạp {amount}k cho {target_name}!\n"
+
+        if type_or_item == "coin":
+            player["coins"] += reward_value
+            message_result += f"💰 Nhận {reward_value} coins!"
+        elif type_or_item == "exp":
+            player["exp"] += reward_value
+            message_result += f"⭐ Nhận {reward_value} EXP!"
+        else:
+            # nạp cần theo tên không dấu
+            name_clean = type_or_item.replace(" ", "").lower()
+            rod_found = None
+            for idx, rod in enumerate(CAN_CAU):
+                if rod["ten"].replace(" ", "").replace("🎍", "").replace("🎋", "").replace("⚙️", "").lower().replace("đ", "d") in name_clean:
+                    rod_found = idx
+                    break
+            if rod_found is not None:
+                player.setdefault("rods", []).append(rod_found)
+                message_result += f"🎣 Nhận được cần {CAN_CAU[rod_found]['ten']}!"
+            else:
+                random_rod = random.choice(CAN_CAU)
+                player.setdefault("rods", []).append(CAN_CAU.index(random_rod))
+                message_result += f"🎁 Không tìm thấy cần '{type_or_item}', tặng ngẫu nhiên {random_rod['ten']}!"
+
+        # Cập nhật BXH nạp
+        user_nap = nap_data.get(str(target_id), {"name": target_name, "total": 0})
+        user_nap["total"] += amount
+        user_nap["last_time"] = time.time()
+        nap_data[str(target_id)] = user_nap
+
+        save_nap(nap_data)
+        save_data(data)
+
+        client.replyMessage(Message(text=message_result), message_object, thread_id, thread_type)
+        return
+
+    if sub == "bxhnap":
+        nap_data = load_nap()
+        if not nap_data:
+            client.replyMessage(Message(text="🏆 Chưa có ai nạp tiền cả!"), message_object, thread_id, thread_type)
+            return
+
+        sorted_list = sorted(nap_data.items(), key=lambda x: x[1]["total"], reverse=True)
+        top_text = "💎 BXH NẠP CÂU CÁ 💎\n\n"
+        for i, (uid, info) in enumerate(sorted_list[:10], start=1):
+            top_text += f"🌀{i}. {info['name']} — 💵 {info['total']}k\n"
+        client.replyMessage(Message(text=top_text), message_object, thread_id, thread_type)
+        return
+            
+    # INFO
+    if sub == "info":
+        cur_idx = player.get("current_rod", 0)
+        rod_name = CAN_CAU[cur_idx]["ten"] if 0 <= cur_idx < len(CAN_CAU) else "Không có"
+        spot_idx = player.get("spot", 0)
+        spot_name = HO_CAU[spot_idx]["ten"] if 0 <= spot_idx < len(HO_CAU) else "Hồ lạ"
+        text = (
+            f"🎣 Hồ sơ của {player.get('name')}\n\n"
+            f"Lv: {player.get('level')} | EXP: {player.get('exp')}/{exp_to_next(player.get('level',1))}\n"
+            f"💰 Coins: {player.get('coins')}\n"
+            f"🎣 Cần đang dùng: {rod_name}\n"
+            f"🌊 Hồ hiện tại: {spot_name}\n"
+            f"🐠 Cá trong kho: {len(player.get('fish',[]))}"
+        )
+        self.reply_message_async(text, message_object, thread_id, thread_type)
+
+        return
+
+    # TRAIN
+    if sub == "train":
+        spend = 100
+        if len(tokens) > 2 and tokens[2].isdigit():
+            spend = max(10, int(tokens[2]))
+        if player.get('coins',0) < spend:
+            client.replyMessage(Message(text=f"💸 Bạn cần {spend} coins để train (bạn có {player.get('coins',0)})."), message_object, thread_id, thread_type)
+            return
+        exp_gain = int(spend * 0.6)
+        player['coins'] -= spend
+        player['exp'] += exp_gain
+        leveled = False
+        while player['exp'] >= exp_to_next(player['level']):
+            player['exp'] -= exp_to_next(player['level'])
+            player['level'] += 1
+            leveled = True
+        data[str(author_id)] = player
+        save_data(data)
+        text = f"🏋️ Bạn đã train và nhận +{exp_gain} EXP (tốn {spend} coins).\n🎯 Level: {player['level']} | EXP: {player['exp']}/{exp_to_next(player['level'])}"
+        if leveled:
+            text += f"\n🆙 Chúc mừng! Bạn đã lên Lv {player['level']}!"
+        
+        # --- CHIA 10% CHO TRI KỶ (THÔNG BÁO RIÊNG) ---
+        partner_id = None
+        partner_name = None
+
+        # Tìm tri kỷ của người chơi hiện tại
+        for pair in triky_data.values():
+            if pair.get("pending"):
+                continue  # bỏ qua nếu chưa xác nhận
+            if str(author_id) == pair["a"]:
+                partner_id = pair["b"]
+                partner_name = pair["b_name"]
+                break
+            elif str(author_id) == pair["b"]:
+                partner_id = pair["a"]
+                partner_name = pair["a_name"]
+                break
+
+        # Nếu có tri kỷ, chia thưởng
+        if partner_id:
+            share_exp = int(exp_gain * 0.1)
+            share_coin = int(coins_gain * 0.1)
+
+            # Nếu tri kỷ có dữ liệu thì cộng thêm EXP và COIN
+            if partner_id in players_data:
+                partner_data = players_data[partner_id]
+                partner_data["exp"] += share_exp
+                partner_data["coins"] += share_coin
+
+                # Kiểm tra lên cấp
+                while partner_data["exp"] >= exp_to_next(partner_data["level"]):
+                    partner_data["exp"] -= exp_to_next(partner_data["level"])
+                    partner_data["level"] += 1
+
+                save_data(players_data)
+
+            # --- GỬI TIN RIÊNG CHO TRI KỶ (FIX THEO share.py) ---
+            try:
+                partner_uid = int(partner_id)  # đảm bảo ID là số
+
+                # thử gửi riêng tư (ThreadType.USER)
+                try:
+                    client.sendMessage(
+                        Message(
+                            text=(
+                                f"💞 Tri kỷ của bạn ({player['name']}) vừa câu cá!\n"
+                                f"🎁 Bạn nhận được chia sẻ tình cảm 10% phần thưởng:\n"
+                                f"⭐ +{share_exp} EXP\n"
+                                f"💰 +{share_coin} coins\n"
+                                f"🎣 Tiếp tục đồng hành cùng nhau nào!"
+                            )
+                        ),
+                        partner_uid,
+                        ThreadType.USER
+                    )
+                    print(f"[INFO] Đã gửi tin riêng cho tri kỷ {partner_name} ({partner_uid})")
+
+                except Exception as e:
+                    # nếu lỗi, fallback gửi trong group
+                    print(f"[WARN] Gửi riêng thất bại ({e}), thử gửi fallback group.")
+                    client.sendMessage(
+                        Message(
+                            text=(
+                                f"💞 Tri kỷ của bạn ({player['name']}) vừa câu cá!\n"
+                                f"🎁 Bạn nhận được chia sẻ tình cảm 10% phần thưởng:\n"
+                                f"⭐ +{share_exp} EXP\n"
+                                f"💰 +{share_coin} coins\n"
+                                f"🎣 (Fallback: gửi trong box vì lỗi gửi riêng.)"
+                            )
+                        ),
+                        thread_id,
+                        thread_type
+                    )
+
+            except Exception as e:
+                print(f"[ERR] Không thể gửi tin riêng cho tri kỷ: {e}")
+
+        # --- PHẢN HỒI CHO NGƯỜI CÂU CÁ ---
+        self.reply_message_async(text, message_object, thread_id, thread_type)
+
+        return
+
+    if sub in ("fish", "cau"):
+        rod_idx = player.get("current_rod", 0)
+        if rod_idx < 0 or rod_idx >= len(CAN_CAU):
+            rod_idx = 0
+        rod = CAN_CAU[rod_idx]
+
+        spot_idx = player.get("spot", 0)
+        spot = HO_CAU[spot_idx] if 0 <= spot_idx < len(HO_CAU) else HO_CAU[0]
+
+        fish = choose_fish_by_rarity(rod_luck=rod.get('luck', 1.0), spot_idx=spot_idx)
+        base_exp = fish.get("exp", 50)
+        base_coins = fish.get("coins", 100)
+
+                # --- THƯỞNG THÊM TỪ PET ---
+                # --- KIỂM TRA TRI KỶ ---
+        triky_data = load_triky()
+        triky_buff = 0.0
+        triky_name = None
+
+        # Tìm xem user có tri kỷ không
+        for pair in triky_data.values():
+            if pair.get("pending"):
+                continue  # bỏ qua lời mời chưa xác nhận
+            if pair["a"] == str(author_id):
+                triky_name = pair["b_name"]
+                triky_buff = get_daily_triky_buff()[1]
+                break
+            elif pair["b"] == str(author_id):
+                triky_name = pair["a_name"]
+                triky_buff = get_daily_triky_buff()[1]
+                break
+                
+        pets_data = load_pets()
+        pet_bonus_exp = 0
+        pet_bonus_coin = 0
+        user_pets = pets_data.get(str(author_id), {})
+        active_pet = user_pets.get("active")
+
+        if active_pet and "list" in user_pets:
+            pet_info = user_pets["list"].get(active_pet, {})
+            bonus = pet_info.get("buff_value", 0.0)
+            pet_bonus_exp = int(base_exp * bonus)
+            pet_bonus_coin = int(base_coins * bonus)
+            
+        exp_gain = int(base_exp * rod.get("exp", 1.0) + random.randint(0, 10))
+        coins_gain = int(base_coins * rod.get("coin", 1.0) + random.randint(0, 10))
+                # --- ÁP DỤNG BUFF TRI KỶ ---
+        if triky_buff > 0:
+            bonus_exp_triky = int(exp_gain * triky_buff)
+            bonus_coin_triky = int(coins_gain * triky_buff)
+            exp_gain += bonus_exp_triky
+            coins_gain += bonus_coin_triky
+        else:
+            bonus_exp_triky = bonus_coin_triky = 0
+            
+
+        special_chance = max(1, int(10000 / rod.get('luck', 1.0)))
+        if random.randint(1, special_chance) == 1:
+            sf = random.choice(SPECIAL_FISH)
+            fish = sf
+            exp_gain = int(sf["exp"] * 1.2)
+            coins_gain = int(sf["coins"] * 1.2)
+
+        player["exp"] += exp_gain
+        player["coins"] += coins_gain
+        exp_gain += pet_bonus_exp
+        coins_gain += pet_bonus_coin
+        player.setdefault("fish", []).append(fish)
+
+        leveled = False
+        while player["exp"] >= exp_to_next(player["level"]):
+            player["exp"] -= exp_to_next(player["level"])
+            player["level"] += 1
+            leveled = True
+
+        save_data(data)
+
+        # --- HIỂN THỊ PHẦN THƯỞNG ---
+        pet_text = ""
+        if active_pet:
+            pet_text = f"🐾 Thưởng thêm từ pet {active_pet}: +{pet_bonus_exp} exp, +{pet_bonus_coin} coins\n"
+
+        triky_text = ""
+        if triky_buff > 0:
+            triky_text = f"💞 Buff từ tri kỷ {triky_name}: +{bonus_exp_triky} exp, +{bonus_coin_triky} coins\n"
+
+        text = (
+            f"🎣 {player['name']} câu cá tại {spot['ten']}\n"
+            f"🎣 Sử dụng: {rod['ten']}\n\n"
+            f"🌊 Plop! Có gì đó cắn câu!\n\n"
+            f"{fish.get('emoji','🐟')} {fish.get('name')} ({fish.get('rarity')})\n"
+            f"⭐ +{exp_gain} EXP\n"
+            f"💰 +{coins_gain} coins\n"
+            f"{pet_text}"
+            f"{triky_text}\n"
+            f"🎯 Level: {player['level']} | EXP: {player['exp']}/{exp_to_next(player['level'])}\n"
+            f"💰 Coins: {player['coins']}\n"
+            f"📊 BXH: Gõ ',cauca bxh' để xem bảng xếp hạng"
+        )
+
+        if leveled:
+            text += f"\n🆙 Chúc mừng! Bạn đã lên Lv {player['level']}!"          
+
+        self.reply_message_async(text, message_object, thread_id, thread_type)
+
+        return
+
+        # ======== NGÂN HÀNG ========
+        # ======== HỆ THỐNG TRI KỶ ========
+    if sub == "triky":
+        triky_data = load_triky()
+        user_id = str(author_id)
+
+        # ----- MENU -----
+        if len(tokens) == 2:
+            text = (
+                "💞 HỆ THỐNG TRI KỶ 💞\n\n"
+                "💌 ,cauca triky @tag — gửi lời mời kết bạn tri kỷ\n"
+                "✅ ,cauca triky ok — chấp nhận lời mời\n"
+                "❌ ,cauca triky no — từ chối lời mời\n"
+                "📊 ,cauca triky bxh — xem bảng xếp hạng tình bạn\n"
+                "💑 ,cauca triky ct — xem chi tiết tri kỷ hiện tại\n"
+                "💔 ,cauca triky huy — hủy tri kỷ hiện tại\n"
+            )
+            self.reply_message_async(text, message_object, thread_id, thread_type)
+
+            return
+
+        # ----- BXH -----
+        if tokens[2].lower() == "bxh":
+            if not triky_data:
+                client.replyMessage(Message(text="🏆 Chưa có cặp đôi nào trong hệ thống!"), message_object, thread_id, thread_type)
+                return
+            sorted_pairs = sorted(triky_data.values(), key=lambda x: x.get("level", 0), reverse=True)
+            text = "💖 BXH TRI KỶ TOÀN SERVER 💖\n\n"
+            for i, pair in enumerate(sorted_pairs[:10], start=1):
+                text += f"{i}. {pair['a_name']} ❤️ {pair['b_name']} — {pair.get('level',0)} điểm tri kỷ\n"
+            self.reply_message_async(text, message_object, thread_id, thread_type)
+
+            return
+
+        # ----- XEM CHI TIẾT -----
+        if tokens[2].lower() == "ct":
+            found = None
+            for pid, info in triky_data.items():
+                if info["a"] == user_id or info["b"] == user_id:
+                    found = info
+                    break
+            if not found:
+                client.replyMessage(Message(text="💔 Bạn chưa có tri kỷ nào cả!"), message_object, thread_id, thread_type)
+                return
+
+            # Nếu chưa xác nhận tri kỷ thì báo đang chờ
+            if found.get("pending"):
+                target_name = found["b_name"] if found["a"] == user_id else found["a_name"]
+                client.replyMessage(
+                    Message(text=f"💌 Bạn đã gửi lời mời tri kỷ đến {target_name}, đang chờ họ phản hồi!\n"
+                                 f"⏳ Lời mời hết hạn sau 5 tiếng kể từ khi gửi."),
+                    message_object, thread_id, thread_type
+                )
+                return
+
+            # Nếu không có trường 'time' (cũ) → dùng request_time thay thế
+            timestamp = found.get("time", found.get("request_time", time.time()))
+            try:
+                since = datetime.datetime.fromtimestamp(timestamp).strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                since = "Không xác định"
+
+            buff_text, buff_value = get_daily_triky_buff()
+            text = (
+                f"💞 THÔNG TIN TRI KỶ 💞\n\n"
+                f"👫 {found['a_name']} ❤️ {found['b_name']}\n"
+                f"📅 Bắt đầu từ: {since}\n"
+                f"💎 Điểm tri kỷ: {found.get('level',0)}\n"
+                f"💫 Buff hôm nay: {buff_text}\n"
+            )
+            self.reply_message_async(text, message_object, thread_id, thread_type)
+
+            return
+
+
+        # ----- HỦY TRI KỶ -----
+        if tokens[2].lower() == "huy":
+            for pid, info in list(triky_data.items()):
+                if info["a"] == user_id or info["b"] == user_id:
+                    del triky_data[pid]
+                    save_triky(triky_data)
+                    client.replyMessage(Message(text="💔 Bạn đã hủy tri kỷ của mình!"), message_object, thread_id, thread_type)
+                    return
+            client.replyMessage(Message(text="❌ Bạn chưa có tri kỷ để hủy!"), message_object, thread_id, thread_type)
+            return
+
+        # ----- CHẤP NHẬN -----
+        if tokens[2].lower() == "ok":
+            for pid, info in triky_data.items():
+                if info.get("pending") == user_id and time.time() - info["request_time"] <= 18000:
+                    info["pending"] = None
+                    info["time"] = time.time()
+                    info["level"] = 1
+                    save_triky(triky_data)
+                    client.sendMessage(Message(text=f"💖 {info['a_name']} và {info['b_name']} đã trở thành TRI KỶ!"), thread_id, thread_type)
+                    return
+            client.replyMessage(Message(text="⌛ Không có lời mời nào hợp lệ hoặc đã hết hạn (5 tiếng)."), message_object, thread_id, thread_type)
+            return
+
+        # ----- TỪ CHỐI -----
+        if tokens[2].lower() == "no":
+            for pid, info in triky_data.items():
+                if info.get("pending") == user_id:
+                    del triky_data[pid]
+                    save_triky(triky_data)
+                    client.replyMessage(Message(text="🚫 Bạn đã từ chối lời mời tri kỷ."), message_object, thread_id, thread_type)
+                    return
+            client.replyMessage(Message(text="❌ Không có lời mời tri kỷ nào để từ chối!"), message_object, thread_id, thread_type)
+            return
+
+        # ----- GỬI LỜI MỜI -----
+        if "@" in tokens[2] or (len(tokens) >= 3 and tokens[2].isdigit()):
+            # Ưu tiên lấy từ mentions
+            if message_object.mentions:
+                target_id = str(message_object.mentions[0].uid)
+            # Nếu không có mention mà nhập UID
+            elif len(tokens) >= 3 and tokens[2].isdigit():
+                target_id = tokens[2]
+            else:
+                client.replyMessage(
+                    Message(text="⚠️ Hãy tag đúng người (hoặc nhập UID) bạn muốn mời làm tri kỷ."),
+                    message_object, thread_id, thread_type
+                )
+                return
+
+            # Chặn tự mời bản thân
+            if target_id == user_id:
+                client.replyMessage(
+                    Message(text="❌ Bạn không thể tự làm tri kỷ với chính mình!"),
+                    message_object, thread_id, thread_type
+                )
+                return
+
+            # Kiểm tra có tri kỷ sẵn chưa
+            for pid, info in triky_data.items():
+                if user_id in (info["a"], info["b"]) or target_id in (info["a"], info["b"]):
+                    client.replyMessage(
+                        Message(text="⚠️ Một trong hai người đã có tri kỷ rồi!"),
+                        message_object, thread_id, thread_type
+                    )
+                    return
+
+            # Lấy tên người gửi và người được mời
+            try:
+                user_name = client.fetchUserInfo(author_id).changed_profiles[author_id].displayName
+            except:
+                user_name = "Người chơi"
+            try:
+                target_name = client.fetchUserInfo(target_id).changed_profiles[target_id].displayName
+            except:
+                target_name = "Người được mời"
+
+            # Lưu dữ liệu lời mời
+            pair_id = f"{user_id}_{target_id}"
+            triky_data[pair_id] = {
+                "a": user_id,
+                "b": target_id,
+                "a_name": user_name,
+                "b_name": target_name,
+                "pending": target_id,
+                "request_time": time.time()
+            }
+            save_triky(triky_data)
+
+            # Thông báo
+            client.replyMessage(
+                Message(
+                    text=(
+                        f"💌 Bạn đã gửi lời mời tri kỷ đến {target_name}! ⏳ Hiệu lực 5 tiếng.\n"
+                        f"💬 Lời mời đã được thông báo trong nhóm."
+                    )
+                ),
+                message_object, thread_id, thread_type
+            )
+
+            client.sendMessage(
+                Message(
+                    text=(
+                        f"💞 {user_name} đã gửi lời mời tri kỷ đến {target_name}!\n"
+                        f"❤️ Hai bạn có muốn trở thành tri kỷ không?\n\n"
+                        f"✅ {target_name}: dùng ,cauca triky ok để đồng ý\n"
+                        f"❌ {target_name}: dùng ,cauca triky no để từ chối\n"
+                        f"⏳ Lời mời có hiệu lực trong 5 tiếng."
+                    )
+                ),
+                thread_id,
+                thread_type
+            )
+            return
+        
+        client.replyMessage(Message(text="⚠️ Dùng ,cauca triky để xem hướng dẫn."), message_object, thread_id, thread_type)
+        return
+        
+    if sub == "bank":
+        if len(tokens) == 2:
+            text = (
+                "🏦 Ngân hàng Cá Cắn Câu 🐟\n\n"
+                "💰 ,cauca bank add <số/all/số %> — Gửi tiền vào ngân hàng\n"
+                "📊 ,cauca bank status — Xem tiền đã gửi vào và Sinh lời\n"
+                "💸 ,cauca bank rut <số | all | %> — Rút tiền\n\n"
+                "💵 Sinh lời: 5% mỗi phút (tính theo thời gian gửi)\n"
+            )
+            self.reply_message_async(text, message_object, thread_id, thread_type)
+
+            return
+
+        # GỬI TIỀN
+        if len(tokens) >= 3 and tokens[2].lower() == "add":
+            if len(tokens) < 4:
+                client.replyMessage(
+                    Message(text="⚠️ Dùng: ,cauca bank add <số | all | %>"),
+                    message_object, thread_id, thread_type
+                )
+                return
+
+            arg = tokens[3].lower()
+            amount = 0
+
+            # Gửi toàn bộ
+            if arg == "all":
+                amount = player["coins"]
+
+            # Gửi theo phần trăm
+            elif arg.endswith("%") and arg[:-1].isdigit():
+                percent = int(arg[:-1])
+                if percent <= 0 or percent > 100:
+                    client.replyMessage(
+                        Message(text="⚠️ Phần trăm phải trong khoảng 1–100%."),
+                        message_object, thread_id, thread_type
+                    )
+                    return
+                amount = int(player["coins"] * percent / 100)
+
+            # Gửi số cụ thể
+            elif arg.isdigit():
+                amount = int(arg)
+
+            else:
+                client.replyMessage(
+                    Message(text="⚠️ Dùng: ,cauca bank add <số | all | %>"),
+                    message_object, thread_id, thread_type
+                )
+                return
+
+            if amount <= 0:
+                client.replyMessage(
+                    Message(text="❌ Số tiền không hợp lệ."),
+                    message_object, thread_id, thread_type
+                )
+                return
+
+            if player["coins"] < amount:
+                client.replyMessage(
+                    Message(text=f"💸 Bạn không đủ {amount} coins để gửi!"),
+                    message_object, thread_id, thread_type
+                )
+                return
+
+            player["coins"] -= amount
+            now = time.time()
+            if "bank" not in player:
+                player["bank"] = {"amount": 0, "time": now}
+
+            player["bank"]["amount"] += amount
+            player["bank"]["time"] = now
+            save_data(data)
+
+            text = (
+                f"🏦 Đã gửi {amount} coins vào ngân hàng!\n"
+                f"💰 Tiền trong ví còn: {player['coins']}"
+            )
+            self.reply_message_async(text, message_object, thread_id, thread_type)
+
+            return
+
+
+        # TRẠNG THÁI
+        if len(tokens) >= 3 and tokens[2].lower() == "status":
+            bank = player.get("bank", {"amount": 0, "time": 0})
+            if bank["amount"] <= 0:
+                client.replyMessage(
+                    Message(text="🏦 Bạn chưa gửi tiền vào ngân hàng."),
+                    message_object, thread_id, thread_type
+                )
+                return
+
+            minutes = int((time.time() - bank["time"]) / 60)
+            rate = 1.05 ** minutes
+            current = int(bank["amount"] * rate)
+
+            text = (
+                f"🏦 Thông tin ngân hàng của {player['name']}:\n"
+                f"💰 Số tiền gửi: {bank['amount']} coins\n"
+                f"⏱ Thời gian gửi: {minutes} phút\n"
+                f"📈 Sinh lời: 5%/phút\n"
+                f"💵 Tổng hiện tại (ước tính): {current} coins"
+            )
+            self.reply_message_async(text, message_object, thread_id, thread_type)
+
+            return
+
+        # RÚT TIỀN
+        if len(tokens) >= 3 and tokens[2].lower() == "rut":
+            bank = player.get("bank", {"amount": 0, "time": 0})
+            if bank["amount"] <= 0:
+                client.replyMessage(
+                    Message(text="🏦 Bạn chưa gửi tiền để rút."),
+                    message_object, thread_id, thread_type
+                )
+                return
+
+            minutes = int((time.time() - bank["time"]) / 60)
+            rate = 1.05 ** minutes
+            current = int(bank["amount"] * rate)
+
+            if len(tokens) < 4:
+                client.replyMessage(
+                    Message(text="⚠️ Dùng: ,cauca bank rut <số | all | %>"),
+                    message_object, thread_id, thread_type
+                )
+                return
+
+            arg = tokens[3].lower()
+            if arg == "all":
+                amount = current
+            elif arg.endswith("%") and arg[:-1].isdigit():
+                percent = int(arg[:-1])
+                amount = int(current * percent / 100)
+            elif arg.isdigit():
+                amount = int(arg)
+            else:
+                client.replyMessage(
+                    Message(text="⚠️ Dùng: ,cauca bank rut <số | all | %>"),
+                    message_object, thread_id, thread_type
+                )
+                return
+
+            if amount > current:
+                client.replyMessage(
+                    Message(text="❌ Số tiền vượt quá số dư ngân hàng!"),
+                    message_object, thread_id, thread_type
+                )
+                return
+
+            remaining = current - amount
+            player["coins"] += amount
+            player["bank"]["amount"] = remaining
+            player["bank"]["time"] = time.time()
+            save_data(data)
+
+            text = (
+                f"💸 Đã rút {amount} coins từ ngân hàng!\n"
+                f"💰 Còn lại: {remaining} coins trong ngân hàng.\n"
+                f"💼 Coins hiện tại: {player['coins']}"
+            )
+            self.reply_message_async(text, message_object, thread_id, thread_type)
+
+            return
+            
+    if sub == "thaboss":
+        if str(author_id) != ADMIN:
+            client.replyMessage(Message(text="🚫 Chỉ admin mới có thể thả boss!"), message_object, thread_id, thread_type)
+            return
+
+            # ======== LỆNH AUTOFARM ========
+    if sub == "autofarm":
+        # ,cauca autofarm on|off [@mention]
+        if len(tokens) == 2:
+            client.replyMessage(Message(text="⚙️ Dùng: ,cauca autofarm on/off | ,cauca autofarm list | ,cauca autofarm off @tag"), message_object, thread_id, thread_type)
+            return
+
+        action = tokens[2].lower()
+
+        # Danh sách autofarm đang chạy trong thread
+        if action == "list":
+            persisted = load_autofarms()
+            tid = str(thread_id)
+            if tid not in persisted or not persisted[tid]:
+                client.replyMessage(Message(text="ℹ️ Hiện chưa có autofarm nào đang chạy trong box này."), message_object, thread_id, thread_type)
+                return
+            text = "🔁 Danh sách autofarm đang chạy:\n\n"
+            for uid, info in persisted[tid].items():
+                since = info.get("since", 0)
+                try:
+                    since_str = datetime.datetime.fromtimestamp(since).strftime("%d/%m/%Y %H:%M")
+                except:
+                    since_str = "Không rõ"
+                text += f"- UID {uid} (bật bởi {info.get('by')}) từ {since_str}\n"
+            self.reply_message_async(text, message_object, thread_id, thread_type)
+
+            return
+
+        # on/off
+        if action in ("on", "off"):
+            # if mention present => target is mentioned user
+            target_uid = None
+            if getattr(message_object, "mentions", None):
+                try:
+                    target_uid = str(message_object.mentions[0].uid)
+                except:
+                    target_uid = None
+
+            # else if a third token is present and digit -> use that as uid
+            elif len(tokens) >= 4 and tokens[3].isdigit():
+                target_uid = tokens[3]
+
+            # if still None -> default to author (self)
+            if not target_uid:
+                target_uid = str(author_id)
+
+            # ON
+            if action == "on":
+                started = start_autofarm_for(client, thread_id, thread_type, target_uid, author_id)
+                if started:
+                    # try to fetch display name
+                    try:
+                        info = client.fetchUserInfo(target_uid).changed_profiles[target_uid]
+                        name = info.displayName
+                    except:
+                        name = target_uid
+                    client.replyMessage(Message(text=f"✅ Đã bật autofarm cho {name} (UID {target_uid})."), message_object, thread_id, thread_type)
+                else:
+                    client.replyMessage(Message(text="⚠️ Autofarm đã chạy cho user này rồi."), message_object, thread_id, thread_type)
+                return
+
+            # OFF
+            if action == "off":
+                stop_autofarm_for(thread_id, target_uid)
+                try:
+                    info = client.fetchUserInfo(target_uid).changed_profiles[target_uid]
+                    name = info.displayName
+                except:
+                    name = target_uid
+                client.replyMessage(Message(text=f"🛑 Đã tắt autofarm cho {name} (UID {target_uid})."), message_object, thread_id, thread_type)
+                return
+
+        client.replyMessage(Message(text="❌ Lệnh autofarm không hợp lệ. Dùng: ,cauca autofarm on/off [@tag] | ,cauca autofarm list"), message_object, thread_id, thread_type)
+        return
+        
+        # ====== TỰ ĐỘNG THẢ BOSS ======
+        if len(tokens) >= 3 and tokens[2].lower() == "tudong":
+            if len(tokens) >= 4:
+                mode = tokens[3].lower()
+                if mode == "on":
+                    if AUTO_BOSS["enabled"]:
+                        client.replyMessage(Message(text="⚙️ Chế độ tự động thả boss đã bật rồi!"), message_object, thread_id, thread_type)
+                        return
+                    AUTO_BOSS["enabled"] = True
+                    schedule_auto_boss(client, thread_id, thread_type)
+                    client.replyMessage(Message(text="✅ Đã bật chế độ tự động thả boss!"), message_object, thread_id, thread_type)
+                    return
+                elif mode == "off":
+                    AUTO_BOSS["enabled"] = False
+                    if AUTO_BOSS["timer"]:
+                        AUTO_BOSS["timer"].cancel()
+                        AUTO_BOSS["timer"] = None
+                    client.replyMessage(Message(text="🛑 Đã tắt chế độ tự động thả boss!"), message_object, thread_id, thread_type)
+                    return
+            client.replyMessage(Message(text="⚙️ Dùng: ,cauca thaboss tudong on/off"), message_object, thread_id, thread_type)
+            return
+
+        # ====== THẢ BOSS NGẪU NHIÊN THỦ CÔNG ======
+        if len(tokens) >= 3 and tokens[2].lower() == "random":
+            if BOSS_EVENT["active"]:
+                client.replyMessage(Message(text="⚠️ Boss hiện tại vẫn đang hoạt động!"), message_object, thread_id, thread_type)
+                return
+
+            boss = random.choice(BOSS_NAMES)
+            BOSS_EVENT["active"] = True
+            BOSS_EVENT["name"] = boss
+            BOSS_EVENT["participants"] = {}
+
+            text = (
+                f"⚔️ Boss xuất hiện! ⚔️\n\n"
+                f"🐉 Boss: {boss}\n"
+                f"👹 Các ngươi giám tham chiến thì đừng hối hận khi mất hết đồ nha!\n\n"
+                f"📅 Thời gian săn: 1 phút\n\n"
+                f"💥 Dùng lệnh `,cauca danhboss` để tham chiến!\n"
+            )
+            self.reply_message_async(text, message_object, thread_id, thread_type)
+
+
+            # Hẹn 60s kết thúc sự kiện
+            t = threading.Timer(60.0, end_boss_event, args=(client, thread_id, thread_type))
+            BOSS_EVENT["thread"] = t
+            t.start()
+            return
+
+        client.replyMessage(Message(text="⚙️ Dùng: ,cauca thaboss random hoặc ,cauca thaboss tudong on/off"), message_object, thread_id, thread_type)
+        return
+
+    # ======== ĐÁNH BOSS ========
+    if sub == "danhboss":
+        if not BOSS_EVENT["active"]:
+            client.replyMessage(Message(text="❌ Hiện không có boss nào để đánh!"), message_object, thread_id, thread_type)
+            return
+
+        boss_name = BOSS_EVENT["name"]
+        if str(author_id) in BOSS_EVENT["participants"]:
+            client.replyMessage(Message(text="⚔️ Bạn đã đăng ký tham chiến boss rồi!"), message_object, thread_id, thread_type)
+            return
+
+        # Lấy tên người chơi
+        try:
+            user_info = client.fetchUserInfo(author_id).changed_profiles[author_id]
+            display_name = user_info.displayName
+        except Exception:
+            display_name = f"Người chơi {author_id}"
+
+        BOSS_EVENT["participants"][str(author_id)] = display_name
+
+        client.replyMessage(
+            Message(text=f"🔥 {display_name} đã đăng ký tham chiến Boss {boss_name} thành công!"),
+            message_object, thread_id, thread_type
+        )
+        return
+               
+    # HO CAU
+    if sub == "hocau":
+        text = "🏞 Danh sách hồ câu:\n"
+        for i,h in enumerate(HO_CAU, start=1):
+            text += f"{i}. {h['ten']} – Yêu cầu Lv {h['yeu_cau']}\n"
+        self.reply_message_async(text, message_object, thread_id, thread_type)
+
+        return
+
+    # GOTO
+    if sub == "goto":
+        if len(tokens) < 3 or not tokens[2].isdigit():
+            client.replyMessage(Message(text="⚠️ Dùng: ,cauca goto <số hồ>"), message_object, thread_id, thread_type)
+            return
+        idx = int(tokens[2]) - 1
+        if idx < 0 or idx >= len(HO_CAU):
+            client.replyMessage(Message(text="❌ Hồ không tồn tại!"), message_object, thread_id, thread_type)
+            return
+        if player.get("level",1) < HO_CAU[idx]["yeu_cau"]:
+            client.replyMessage(Message(text=f"⚠️ Cần Lv {HO_CAU[idx]['yeu_cau']} để đến hồ này!"), message_object, thread_id, thread_type)
+            return
+        player["spot"] = idx
+        player["exp"] += 30
+        save_data(data)
+        client.replyMessage(Message(text=f"🚣 Bạn đã đến {HO_CAU[idx]['ten']} (+30 EXP)"), message_object, thread_id, thread_type)
+        return
+
+    # ======== LỆNH PET ========
+    if sub == "pet":
+        user_id = str(author_id)
+        pets_data = load_pets()
+        if len(tokens) == 2:
+            menu = (
+                "🐾 DANH SÁCH LỆNH PET 🐾\n\n"
+                "1️⃣ ,cauca pet shop → xem danh sách pet trong cửa hàng\n"
+                "2️⃣ ,cauca pet buy <số> → mua pet theo số thứ tự\n"
+                "3️⃣ ,cauca pet status → xem pet đang sở hữu\n"
+                "4️⃣ ,cauca pet upgrade → nâng cấp pet (+buff, -100000 coin)\n"
+                "5️⃣ ,cauca pet chon <stt>→ chọn làm pet chính\n" 
+            )
+            client.replyMessage(Message(text=menu), message_object, thread_id, thread_type)
+            return
+
+        act = tokens[2].lower()
+
+        # ========== SHOP ==========
+                # ========== CHỌN PET CHÍNH ==========
+        if act == "chon":
+            if len(tokens) < 4 or not tokens[3].isdigit():
+                client.replyMessage(Message(text="🐾 Dùng: ,cauca pet chon <số thứ tự trong vườn>"), message_object, thread_id, thread_type)
+                return
+            idx = int(tokens[3]) - 1
+            user_pets = pets_data.get(user_id, {"active": None, "list": {}})
+            pet_names = list(user_pets["list"].keys())
+            if idx < 0 or idx >= len(pet_names):
+                client.replyMessage(Message(text="❌ Số thứ tự không hợp lệ!"), message_object, thread_id, thread_type)
+                return
+
+            chosen = pet_names[idx]
+            user_pets["active"] = chosen
+            pets_data[user_id] = user_pets
+            save_pets(pets_data)
+            client.replyMessage(Message(text=f"✅ Đã chọn pet chính: {chosen} 🐾"), message_object, thread_id, thread_type)
+            return
+            
+        if act == "shop":
+            text = "🐕‍🦺 CỬA HÀNG PET 🛒\n\n"
+            for i, pet in enumerate(PET_SHOP, start=1):
+                text += f"{i:02d}. {pet['name']} ({pet['type']}) — {pet['buff']}\n"
+            text += "\n💰 Dùng: ,cauca pet buy <số thứ tự>"
+            self.reply_message_async(text, message_object, thread_id, thread_type)
+
+            return
+
+        # ========== MUA ==========
+        if act == "buy":
+            if len(tokens) < 4 or not tokens[3].isdigit():
+                client.replyMessage(Message(text="🛒 Dùng: ,cauca pet buy <số thứ tự trong shop>"), message_object, thread_id, thread_type)
+                return
+            idx = int(tokens[3]) - 1
+            if idx < 0 or idx >= len(PET_SHOP):
+                client.replyMessage(Message(text="❌ Số thứ tự không hợp lệ!"), message_object, thread_id, thread_type)
+                return
+
+            pet = PET_SHOP[idx]
+            user_pets = pets_data.get(user_id, {"active": None, "list": {}})
+            if pet["name"] in user_pets["list"]:
+                client.replyMessage(Message(text="🐾 Bạn đã sở hữu pet này rồi!"), message_object, thread_id, thread_type)
+                return
+
+            user_pets["list"][pet["name"]] = {
+                "type": pet["type"],
+                "buff": pet["buff"],
+                "buff_value": pet["value"],
+                "level": 1,
+                "adopt_time": time.time()
+            }
+            pets_data[user_id] = user_pets
+            save_pets(pets_data)
+            client.replyMessage(Message(text=f"🎉 Bạn đã nhận nuôi pet {pet['name']} ({pet['type']}) thành công!"), message_object, thread_id, thread_type)
+            return
+
+        # ========== TRẠNG THÁI ==========
+        if act == "status":
+            user_pets = pets_data.get(user_id, {"active": None, "list": {}})
+            if not user_pets["list"]:
+                client.replyMessage(Message(text="🐾 Bạn chưa có pet nào!"), message_object, thread_id, thread_type)
+                return
+
+            text = "📜 DANH SÁCH PET CỦA BẠN 📜\n\n"
+            for name, info in user_pets["list"].items():
+                lived = seconds_to_readable(time.time() - info["adopt_time"])
+                text += (
+                    f"🐕 {name} ({info['type']})\n"
+                    f"⚙️ Buff: {info['buff']}\n"
+                    f"⭐ Level: {info['level']}\n"
+                    f"⏳ Thời gian nuôi: {lived}\n\n"
+                
+                )
+            client.replyMessage(Message(text=text.strip()), message_object, thread_id, thread_type)
+            return
+
+        # ========== NÂNG CẤP ==========
+        if act == "upgrade":
+            user_pets = pets_data.get(user_id, {"active": None, "list": {}})
+            if not user_pets["list"]:
+                client.replyMessage(Message(text="🐾 Bạn chưa có pet nào để nâng cấp!"), message_object, thread_id, thread_type)
+                return
+
+            # Giả sử luôn nâng cấp pet đầu tiên
+            pet_name, pet_data = list(user_pets["list"].items())[0]
+            cost = 100000
+            pet_data["level"] += 1
+            pet_data["buff_value"] += 0.02
+            pet_data["buff"] = f"Tăng hiệu quả +{int(pet_data['buff_value']*100)}%"
+            pets_data[user_id]["list"][pet_name] = pet_data
+            save_pets(pets_data)
+            client.replyMessage(Message(text=f"⬆️ Pet {pet_name} đã lên cấp {pet_data['level']}! Buff mới: {pet_data['buff']}"), message_object, thread_id, thread_type)
+            return
+              
+         # ======== LỆNH GUILD ========
+    if sub == "guild":
+
+        guilds = load_guilds()
+
+        # menu
+        if len(tokens) == 2:
+            text = (
+                "🏛️ GUILD MENU\n\n"
+                ",cauca guild list              — Danh sách guild toàn server\n"
+                ",cauca guild create <tên> [uid] — Tạo guild\n"
+                ",cauca guild join <uid>        — Gửi yêu cầu tham gia guild\n"
+                ",cauca guild duyet list        — (Chủ/Phó) Xem danh sách yêu cầu\n"
+                ",cauca guild duyet <số>       — (Chủ/Phó) Duyệt người chơi\n"
+                ",cauca myguild                 — Thông tin guild của bạn\n"
+                ",cauca guild donate <số>      — Donate vào kho guild\n"
+                ",cauca guild upgrade          — Nâng cấp guild\n"
+                ",cauca add silver <@id|uid>   — (Chủ) Thăng chức Phó\n"
+                ",cauca remove silver <@id|uid>— (Chủ) Hạ chức Phó\n"
+                ",cauca guild tochuc           — (Chủ) Tổ chức buff guild (cost 20.000.000)\n"
+            )
+            self.reply_message_async(text, message_object, thread_id, thread_type)
+
+            return
+
+        sub2 = tokens[2].lower() if len(tokens) > 2 else ""
+
+        # ======== LIST GUILD ========
+        if sub2 == "list":
+            if not guilds:
+                client.replyMessage(Message(text="🏛️ Hiện chưa có guild nào."), message_object, thread_id, thread_type)
+                return
+            text = "🏛️ Danh sách Guild:\n\n"
+            for gid, g in guilds.items():
+                text += f"- {g.get('name')} (UID: {gid}) | Lv: {g.get('level',1)} | Members: {len(g.get('members',{}))}\n"
+            self.reply_message_async(text, message_object, thread_id, thread_type)
+
+            return
+
+        # ======== CREATE GUILD ========
+        if sub2 == "create":
+            if len(tokens) < 4:
+                client.replyMessage(Message(text="⚠️ Dùng: ,cauca guild create <tên guild> [uid]"), message_object, thread_id, thread_type)
+                return
+
+            name = tokens[3]
+            provided_uid = tokens[4] if len(tokens) > 4 else None
+            gid = provided_uid if provided_uid else gen_guild_uid()
+
+            if gid in guilds:
+                client.replyMessage(Message(text="❌ UID guild đã tồn tại, hãy chọn UID khác."), message_object, thread_id, thread_type)
+                return
+
+            guilds[gid] = {
+                "name": name,
+                "uid": gid,
+                "owner": str(author_id),
+                "silver": {},
+                "members": {str(author_id): player["name"]},
+                "requests": {},
+                "balance": 0,
+                "level": 1,
+                "donations": {},
+                "active_buff": None
+            }
+            save_guilds(guilds)
+            client.replyMessage(Message(text=f"✅ Tạo guild '{name}' thành công! Bạn là Chủ guild (UID: {gid})"), message_object, thread_id, thread_type)
+            return
+
+        # ======== JOIN GUILD ========
+        if sub2 == "join":
+            if len(tokens) < 4:
+                client.replyMessage(Message(text="⚠️ Dùng: ,cauca guild join <UID guild>"), message_object, thread_id, thread_type)
+                return
+
+            gid = tokens[3]
+            if gid not in guilds:
+                client.replyMessage(Message(text="❌ Guild không tồn tại."), message_object, thread_id, thread_type)
+                return
+
+            g = guilds[gid]
+            uid_s = str(author_id)
+
+            if uid_s in g.get("members", {}):
+                client.replyMessage(Message(text="ℹ️ Bạn đã là thành viên guild này."), message_object, thread_id, thread_type)
+                return
+            if uid_s in g.get("requests", {}):
+                client.replyMessage(Message(text="⚠️ Bạn đã gửi yêu cầu, chờ duyệt."), message_object, thread_id, thread_type)
+                return
+
+            g["requests"][uid_s] = player["name"]
+            save_guilds(guilds)
+            client.replyMessage(Message(text=f"📨 Đã gửi yêu cầu tham gia guild '{g['name']}'. Chờ chủ/phó duyệt."), message_object, thread_id, thread_type)
+            return
+
+        # ======== DUYỆT DANH SÁCH ========
+        if sub2 == "duyet" and len(tokens) > 3 and tokens[3].lower() == "list":
+            can_manage = None
+            for gid, g in guilds.items():
+                if str(author_id) == g.get("owner") or str(author_id) in g.get("silver", {}):
+                    can_manage = (gid, g)
+                    break
+
+            if not can_manage:
+                client.replyMessage(Message(text="🚫 Bạn không có quyền duyệt yêu cầu!"), message_object, thread_id, thread_type)
+                return
+
+            gid, g = can_manage
+            reqs = g.get("requests", {})
+            if not reqs:
+                client.replyMessage(Message(text="📭 Không có yêu cầu tham gia nào."), message_object, thread_id, thread_type)
+                return
+
+            text = f"📜 Danh sách yêu cầu vào Guild '{g['name']}' (UID: {gid}):\n"
+            for i, (uid, nm) in enumerate(reqs.items(), start=1):
+                text += f"{i}. {nm} (UID: {uid})\n"
+            text += "\nDùng: ,cauca guild duyet <số thứ tự> để duyệt."
+            self.reply_message_async(text, message_object, thread_id, thread_type)
+
+            return
+
+        # ======== DUYỆT MỘT NGƯỜI ========
+        if sub2 == "duyet" and len(tokens) > 3 and tokens[3].isdigit():
+            idx = int(tokens[3]) - 1
+            can_manage = None
+            for gid, g in guilds.items():
+                if str(author_id) == g.get("owner") or str(author_id) in g.get("silver", {}):
+                    can_manage = (gid, g)
+                    break
+
+            if not can_manage:
+                client.replyMessage(Message(text="🚫 Bạn không có quyền duyệt yêu cầu!"), message_object, thread_id, thread_type)
+                return
+
+            gid, g = can_manage
+            req_items = list(g.get("requests", {}).items())
+
+            if idx < 0 or idx >= len(req_items):
+                client.replyMessage(Message(text="❌ Số thứ tự không hợp lệ."), message_object, thread_id, thread_type)
+                return
+
+            uid, uname = req_items[idx]
+            g["members"][uid] = uname
+            del g["requests"][uid]
+            save_guilds(guilds)
+            client.replyMessage(Message(text=f"✅ Đã duyệt {uname} vào Guild '{g['name']}'."), message_object, thread_id, thread_type)
+            return
+
+        # ======== MYGUILD ========
+        if sub2 == "myguild":
+            gid, g = get_player_guild(guilds, author_id)
+            if not gid:
+                client.replyMessage(Message(text="ℹ️ Bạn chưa thuộc guild nào."), message_object, thread_id, thread_type)
+                return
+
+            donations = g.get("donations", {})
+            top = sorted(donations.items(), key=lambda kv: kv[1], reverse=True)
+            top_text = top[0] if top else ("-", 0)
+
+            text = (
+                f"🏛️ Guild: {g['name']} (UID: {gid})\n"
+                f"👑 Chủ: {g.get('owner')}\n"
+                f"🏅 Level: {g.get('level',1)}\n"
+                f"👥 Thành viên: {len(g.get('members',{}))}\n"
+                f"💰 Kho guild: {g.get('balance',0)} coins\n"
+                f"💎 Top donate: {top_text[0]} — {top_text[1]} coins"
+            )
+            self.reply_message_async(text, message_object, thread_id, thread_type)
+
+            return
+
+        # ======== DONATE ========
+        if sub2 == "donate":
+            if len(tokens) < 4 or not tokens[3].isdigit():
+                client.replyMessage(Message(text="⚠️ Dùng: ,cauca guild donate <số coins>"), message_object, thread_id, thread_type)
+                return
+
+            amount = int(tokens[3])
+            if amount <= 0:
+                client.replyMessage(Message(text="❌ Số tiền không hợp lệ."), message_object, thread_id, thread_type)
+                return
+
+            gid, g = get_player_guild(guilds, author_id)
+            if not gid:
+                client.replyMessage(Message(text="ℹ️ Bạn chưa ở trong guild nào."), message_object, thread_id, thread_type)
+                return
+
+            if player["coins"] < amount:
+                client.replyMessage(Message(text="💸 Bạn không đủ coins để donate."), message_object, thread_id, thread_type)
+                return
+
+            player["coins"] -= amount
+            g["balance"] = g.get("balance", 0) + amount
+            g["donations"][str(author_id)] = g.get("donations", {}).get(str(author_id), 0) + amount
+            save_data(data)
+            save_guilds(guilds)
+            client.replyMessage(Message(text=f"🙏 Cảm ơn! Bạn đã donate {amount} coins vào Guild '{g['name']}'."), message_object, thread_id, thread_type)
+            return
+
+        # ======== UPGRADE GUILD ========
+        if sub2 == "upgrade":
+            gid, g = get_player_guild(guilds, author_id)
+            if not gid:
+                client.replyMessage(Message(text="ℹ️ Bạn chưa ở trong guild nào."), message_object, thread_id, thread_type)
+                return
+            if str(author_id) != g.get("owner"):
+                client.replyMessage(Message(text="🚫 Chỉ chủ guild mới có thể nâng cấp."), message_object, thread_id, thread_type)
+                return
+
+            next_lv = g.get("level", 1) + 1
+            cost = 1000000 * next_lv
+            if g.get("balance", 0) < cost:
+                client.replyMessage(Message(text=f"💰 Guild không đủ tiền (cần {cost} coins)."), message_object, thread_id, thread_type)
+                return
+
+            g["balance"] -= cost
+            g["level"] = next_lv
+            save_guilds(guilds)
+            client.replyMessage(Message(text=f"🎉 Guild '{g['name']}' đã được nâng lên Lv {next_lv}!"), message_object, thread_id, thread_type)
+            return
+
+        # ======== TOCHUC BUFF ========
+        if sub2 == "tochuc":
+            gid, g = get_player_guild(guilds, author_id)
+            if not gid:
+                client.replyMessage(Message(text="ℹ️ Bạn chưa ở trong guild nào."), message_object, thread_id, thread_type)
+                return
+            if str(author_id) != g.get("owner"):
+                client.replyMessage(Message(text="🚫 Chỉ chủ guild mới có thể tổ chức buff."), message_object, thread_id, thread_type)
+                return
+
+            cost = 20000000
+            if g.get("balance", 0) < cost:
+                client.replyMessage(Message(text=f"💰 Guild không đủ tiền (cần {cost} coins)."), message_object, thread_id, thread_type)
+                return
+
+            dur_seconds = 5 * 3600
+            expires = int(time.time()) + dur_seconds
+            buff = {"rare": 0.15, "coin": 0.10, "exp": 0.13, "expires": expires}
+            g["balance"] -= cost
+            g["active_buff"] = buff
+            save_guilds(guilds)
+
+            client.replyMessage(Message(text=f"🎊 Guild '{g['name']}' đã tổ chức buff! (+15% rare, +10% coin, +13% EXP trong 5h)."), message_object, thread_id, thread_type)
+            return
+
+        # ======== FALLBACK ========
+        client.replyMessage(Message(text="❌ Lệnh guild không hợp lệ. Gõ ,cauca guild để xem menu."), message_object, thread_id, thread_type)
+        return
+    # SHOP
+    if sub == "shop":
+        page = int(tokens[2]) if len(tokens) > 2 and tokens[2].isdigit() else 1
+        per_page = 10
+        start = (page-1)*per_page
+        items = CAN_CAU[start:start+per_page]
+        text = f"🛒 Shop Cần Câu (Trang {page}):\n"
+        for i,item in enumerate(items, start=start+1):
+            text += f"{i}. {item['ten']} - {item['gia']} coins (Luck x{item.get('luck')})\n"
+        text += "\nDùng ,cauca mua <số> để mua hoặc ,cauca shop <trang> để xem trang khác."
+        self.reply_message_async(text, message_object, thread_id, thread_type)
+
+        return
+
+    # MUA
+    if sub == "mua":
+        if len(tokens) < 3 or not tokens[2].isdigit():
+            client.replyMessage(Message(text="⚠️ Dùng: ,cauca mua <số>"), message_object, thread_id, thread_type)
+            return
+        idx = int(tokens[2]) - 1
+        if idx < 0 or idx >= len(CAN_CAU):
+            client.replyMessage(Message(text="❌ Không có item này!"), message_object, thread_id, thread_type)
+            return
+        item = CAN_CAU[idx]
+        if player.get("coins",0) < item["gia"]:
+            client.replyMessage(Message(text="💸 Bạn không đủ tiền mua item này!"), message_object, thread_id, thread_type)
+            return
+        player["coins"] -= item["gia"]
+        if idx not in player.get("rods", []):
+            player["rods"].append(idx)
+        player["current_rod"] = idx
+        save_data(data)
+        client.replyMessage(Message(text=f"✅ Đã mua và trang bị: {item['ten']}"), message_object, thread_id, thread_type)
+        return
+
+    # CAN
+    if sub == "can":
+        owned = player.get("rods", [0])
+        if len(tokens) > 2 and tokens[2].isdigit():
+            choice = int(tokens[2]) - 1
+            if 0 <= choice < len(owned):
+                player["current_rod"] = owned[choice]
+                save_data(data)
+                client.replyMessage(Message(text=f"✅ Đã trang bị: {CAN_CAU[player['current_rod']]['ten']}"), message_object, thread_id, thread_type)
+                return
+            else:
+                client.replyMessage(Message(text="❌ Số thứ tự không hợp lệ trong danh sách cần sở hữu."), message_object, thread_id, thread_type)
+                return
+        text = f"🪝 Cần đang dùng: {CAN_CAU[player.get('current_rod',0)]['ten']}\nDanh sách cần sở hữu:\n"
+        for i, r_idx in enumerate(owned, start=1):
+            name = CAN_CAU[r_idx]['ten']
+            text += f"{i}. {name}\n"
+        text += "\nDùng: ,cauca can <số> để trang bị."
+        self.reply_message_async(text, message_object, thread_id, thread_type)
+
+        return
+
+    # SELL
+    if sub == "sell":
+        if len(tokens) > 2 and tokens[2].lower() == "all":
+            if not player.get("fish"):
+                client.replyMessage(Message(text="🐟 Bạn chưa có cá để bán."), message_object, thread_id, thread_type)
+                return
+            total = sum(f.get("coins",0) for f in player.get("fish",[]))
+            count = len(player["fish"])
+            player["coins"] += total
+            player["fish"] = []
+            save_data(data)
+            client.replyMessage(Message(text=f"💰 Đã bán {count} con cá, nhận {total} coins."), message_object, thread_id, thread_type)
+            return
+
+    # BUFF
+    if sub == "buff":
+        if str(author_id) != ADMIN:
+            client.replyMessage(Message(text="🚫 Bạn không có quyền dùng lệnh buff!"), message_object, thread_id, thread_type)
+            return
+
+        if len(tokens) < 4:
+            client.replyMessage(Message(text="⚙️ Dùng: ,cauca buff <coin|exp|can> <giá trị> [@tag người nhận]"), message_object, thread_id, thread_type)
+            return
+        buff_type = tokens[2].lower()
+        buff_value = tokens[3]
+        mentions = getattr(message_object, "mentions", [])
+        target_id, target_name = author_id, display_name
+        if mentions:
+            if str(author_id) != ADMIN:
+                client.replyMessage(Message(text="🚫 Bạn không có quyền buff cho người khác!"), message_object, thread_id, thread_type)
+                return
+            target_id = mentions[0].user_id
+            try:
+                info = client.fetchUserInfo(target_id).changed_profiles[target_id]
+                target_name = info.displayName
+            except:
+                target_name = "Người chơi"
+        target_player = get_player(data, target_id, target_name)
+        if buff_type == "coin":
+            try:
+                amount = int(buff_value)
+                target_player["coins"] += amount
+                save_data(data)
+                msg = f"💰 Buff +{amount} coins cho {'bạn' if target_id == author_id else target_name}!"
+                client.replyMessage(Message(text=msg), message_object, thread_id, thread_type)
+            except:
+                client.replyMessage(Message(text="⚠️ Giá trị coin phải là số!"), message_object, thread_id, thread_type)
+            return
+        elif buff_type == "exp":
+            try:
+                amount = int(buff_value)
+                target_player["exp"] += amount
+                leveled = False
+                while target_player["exp"] >= exp_to_next(target_player["level"]):
+                    target_player["exp"] -= exp_to_next(target_player["level"])
+                    target_player["level"] += 1
+                    leveled = True
+                save_data(data)
+                msg = f"⭐ Buff +{amount} EXP cho {'bạn' if target_id == author_id else target_name}!"
+                if leveled:
+                    msg += f"\n🆙 {target_name} đã lên Lv {target_player['level']}!"
+                client.replyMessage(Message(text=msg), message_object, thread_id, thread_type)
+            except:
+                client.replyMessage(Message(text="⚠️ Giá trị EXP phải là số!"), message_object, thread_id, thread_type)
+            return
+        elif buff_type == "can":
+            name_key = buff_value.lower().replace("can_", "")
+            matched_idx = None
+            for i, c in enumerate(CAN_CAU):
+                if name_key in c["ten"].lower().replace(" ", ""):
+                    matched_idx = i
+                    break
+            if matched_idx is None:
+                client.replyMessage(Message(text="❌ Không tìm thấy cần câu này!"), message_object, thread_id, thread_type)
+                return
+            if matched_idx not in target_player["rods"]:
+                target_player["rods"].append(matched_idx)
+            target_player["current_rod"] = matched_idx
+            save_data(data)
+            msg = f"🎣 Buff {CAN_CAU[matched_idx]['ten']} cho {'bạn' if target_id == author_id else target_name}!"
+            client.replyMessage(Message(text=msg), message_object, thread_id, thread_type)
+            return
+        else:
+            client.replyMessage(Message(text="⚠️ Loại buff không hợp lệ! Dùng coin, exp hoặc can."), message_object, thread_id, thread_type)
+            return
+
+     # ======== LỆNH RESET DỮ LIỆU ========
+    if sub == "rest":
+        # Chỉ admin được phép
+        if str(author_id) != ADMIN:
+            client.replyMessage(Message(text="🚫 Bạn không có quyền reset dữ liệu!"), message_object, thread_id, thread_type)
+            return
+
+        # Nếu chỉ gọi ,cauca rest -> reset toàn bộ
+        if len(tokens) == 2:
+            confirm_text = "⚠️ Bạn có chắc muốn reset toàn bộ dữ liệu câu cá trên server không?\n\n👉 Nếu chắc chắn, hãy nhập lại: ,cauca rest all"
+            client.replyMessage(Message(text=confirm_text), message_object, thread_id, thread_type)
+            return
+
+        # Nếu gọi ,cauca rest all -> xóa toàn bộ dữ liệu
+        if len(tokens) >= 3 and tokens[2].lower() == "all":
+            data.clear()
+            save_data(data)
+            client.replyMessage(Message(text="🧹 Tất cả dữ liệu câu cá đã được reset toàn server!"), message_object, thread_id, thread_type)
+            return
+
+        # ======== RESET MỘT NGƯỜI DÙNG ========
+        if len(tokens) >= 3 and tokens[2].lower() == "user":
+            if len(tokens) < 4:
+                client.replyMessage(Message(text="📜 Dùng: ,cauca rest user <@mention | UID | số thứ tự trong rank>"), message_object, thread_id, thread_type)
+                return
+
+            target = tokens[3]
+
+            # Nếu là @mention
+            if message_object.mentions:
+                uid_target = message_object.mentions[0].uid
+            # Nếu là UID
+            elif target.isdigit() and target in data:
+                uid_target = target
+            # Nếu là số thứ tự trong rank
+            elif target.isdigit():
+                rank_list = sorted(data.items(), key=lambda x: (x[1].get("level", 0), x[1].get("exp", 0)), reverse=True)
+                idx = int(target) - 1
+                if idx < 0 or idx >= len(rank_list):
+                    client.replyMessage(Message(text="❌ Số thứ tự không hợp lệ!"), message_object, thread_id, thread_type)
+                    return
+                uid_target = rank_list[idx][0]
+            else:
+                client.replyMessage(Message(text="❌ Không tìm thấy người cần reset!"), message_object, thread_id, thread_type)
+                return
+
+            if uid_target in data:
+                del data[uid_target]
+                save_data(data)
+                client.replyMessage(Message(text=f"🧹 Đã reset dữ liệu của người dùng uid {uid_target}!"), message_object, thread_id, thread_type)
+            else:
+                client.replyMessage(Message(text="❌ Người dùng này chưa có dữ liệu câu cá!"), message_object, thread_id, thread_type)
+            return
+
+    if sub == "bxh":
+        ranking = sorted(load_data().items(), key=lambda kv: (kv[1].get("level",0), kv[1].get("exp",0)), reverse=True)[:10]
+        text = "🏆 BXH Top 10 người chơi Câu Cá:\n"
+        for i,(uid,p) in enumerate(ranking,start=1):
+            text += f"{i}. {p.get('name','Ng')} — Lv{p.get('level',0)} ({p.get('exp',0)} EXP)\n"
+        self.reply_message_async(text, message_object, thread_id, thread_type)
+
+        return
+
+    client.replyMessage(Message(text="❌ Lệnh không hợp lệ. Gõ ,cauca để xem menu."), message_object, thread_id, thread_type)
+
+def PTA():
+    return {
+        'cauca': handle_cauca_command
+    }

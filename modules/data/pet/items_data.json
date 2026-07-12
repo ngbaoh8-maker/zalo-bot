@@ -1,0 +1,9 @@
+{
+  "atk_chip": {
+    "name": "Chip Tăng ATK",
+    "rarity": "rare",
+    "atk": 10,
+    "def": 0,
+    "crit": 0
+  }
+}

@@ -1,0 +1,8 @@
+1. Download tất cả về
+2. Cài thư viện cần thiết gồm:
+    pip install requests
+    pip install emoji
+	pip install pillow
+	pip install zlapi --upgrade
+3. Để tất cả các file deobfuscate.json, obcore_welcome.py, welcome2.py và thư mục font đặt ngang hàng nhau
+3. Run file chính welcome2.py sau đó vào group cần bật gõ lệnh !wl on

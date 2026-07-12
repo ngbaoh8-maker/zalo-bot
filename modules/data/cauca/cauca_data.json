@@ -1,0 +1,75 @@
+{
+  "6758987518092179930": {
+    "players": {
+      "700542342650452398": {
+        "gold": 1,
+        "exp": 10,
+        "level": 1,
+        "bag": [
+          {
+            "fish": "🐟 Cá rô",
+            "w": 219,
+            "g": 1,
+            "t": 1760046613
+          }
+        ],
+        "items": {
+          "rod1": 1
+        },
+        "stats": {}
+      }
+    },
+    "shop": {
+      "bait": {
+        "name": "🪱 Mồi thường",
+        "price": 200,
+        "effect": "+5% cá hiếm"
+      },
+      "vipbait": {
+        "name": "🍤 Mồi VIP",
+        "price": 500,
+        "effect": "+20% cá hiếm"
+      },
+      "rod2": {
+        "name": "🪵 Cần Gỗ",
+        "price": 500,
+        "bonus": {
+          "exp": 10,
+          "rare": 5,
+          "gold": 0,
+          "cool": 2
+        }
+      },
+      "rod3": {
+        "name": "🎋 Cần Tre",
+        "price": 1000,
+        "bonus": {
+          "exp": 15,
+          "rare": 8,
+          "gold": 5,
+          "cool": 3
+        }
+      },
+      "rod4": {
+        "name": "✨ Cần Vàng",
+        "price": 2000,
+        "bonus": {
+          "exp": 25,
+          "rare": 10,
+          "gold": 15,
+          "cool": 5
+        }
+      },
+      "rod5": {
+        "name": "💎 Cần Kim Cương",
+        "price": 5000,
+        "bonus": {
+          "exp": 50,
+          "rare": 20,
+          "gold": 30,
+          "cool": 10
+        }
+      }
+    }
+  }
+}

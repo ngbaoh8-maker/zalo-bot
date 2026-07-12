@@ -1,0 +1,601 @@
+import pytz
+import time
+import threading
+import logging
+import json
+from pathlib import Path
+import atexit
+import requests
+import os
+from zlapi.models import Message, ThreadType
+
+des = {
+    'version': "1.0.2",
+    'credits': "Dexry W Duc Duy",
+    'description': "Rãi Nội dung Qc video + ảnh",
+    'power': "Thành viên"
+}
+
+# ID của bạn (chỉ admin được phép điều khiển bot)
+ADMIN_ID = [
+    "833018801528797356",
+    "1234567890123456789",
+    "9876543210987654321"
+]  # thay bằng ID bạn nếu khác
+
+# Cấu hình logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    filename='auto_rai.log',
+    encoding='utf-8'
+)
+
+# Trạng thái toàn cục
+rai_state = {}  # {username: {thread_id: {running: bool, thread: Thread}}}
+rai_all_state = {}  # {username: {running: bool, thread: Thread}}
+state_lock = threading.Lock()
+MESSAGE_DELAY = 0.3
+NETWORK_TIMEOUT = 10
+VN_TZ = pytz.timezone('Asia/Ho_Chi_Minh')
+
+# Hàm dọn dẹp
+def cleanup():
+    with state_lock:
+        for username in list(rai_state):
+            for thread_id in list(rai_state[username]):
+                rai_state[username][thread_id]['running'] = False
+            if username in rai_all_state:
+                rai_all_state[username]['running'] = False
+    logging.info("Đã dọn dẹp các luồng auto rai.")
+atexit.register(cleanup)
+
+# Xử lý file
+def ensure_data_dir(username: str) -> Path:
+    data_dir = Path(f"data/{username}")
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir
+
+def get_file_paths(username: str) -> dict:
+    data_dir = ensure_data_dir(username)
+    return {
+        "disbox": data_dir / "disbox.json",
+        "rai": data_dir / "rai.json",
+        "card": data_dir / "rai_card.json",
+        "time": data_dir / "rai_time.json",
+        "image": data_dir / "image.json",
+        "video": data_dir / "video.json"
+    }
+
+def load_json_file(file_path: Path, default: any) -> any:
+    try:
+        if file_path.exists():
+            with file_path.open("r", encoding="utf-8") as f:
+                content = f.read().strip()
+                if content:
+                    return json.loads(content)
+        return default
+    except:
+        return default
+
+def save_json_file(file_path: Path, data: any) -> None:
+    try:
+        with file_path.open("w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+    except:
+        pass
+
+def load_disbox(username: str) -> list:
+    return load_json_file(get_file_paths(username)["disbox"], [])
+
+def save_disbox(username: str, disbox_ids: list) -> None:
+    save_json_file(get_file_paths(username)["disbox"], disbox_ids)
+
+def load_rai_message(username: str) -> str:
+    try:
+        with get_file_paths(username)["rai"].open("r", encoding="utf-8") as f:
+            return f.read().strip()
+    except:
+        return ""
+
+def save_rai_message(username: str, message_text: str) -> None:
+    try:
+        with get_file_paths(username)["rai"].open("w", encoding="utf-8") as f:
+            f.write(message_text)
+    except:
+        pass
+
+def load_card(username: str) -> dict:
+    return load_json_file(get_file_paths(username)["card"], {})
+
+def save_card(username: str, card_data: dict) -> None:
+    save_json_file(get_file_paths(username)["card"], card_data)
+
+def load_rai_time(username: str) -> int:
+    return load_json_file(get_file_paths(username)["time"], {"time": 10})["time"]
+
+def save_rai_time(username: str, minutes: int) -> None:
+    save_json_file(get_file_paths(username)["time"], {"time": minutes})
+
+def load_images(username: str) -> list:
+    return load_json_file(get_file_paths(username)["image"], [])
+
+def save_images(username: str, image_links: list) -> None:
+    save_json_file(get_file_paths(username)["image"], image_links)
+
+def load_videos(username: str) -> list:
+    return load_json_file(get_file_paths(username)["video"], [])
+
+def save_videos(username: str, video_data: list) -> None:
+    save_json_file(get_file_paths(username)["video"], video_data)
+
+def download_images(link_list: list, save_folder: str = "temp_images") -> list:
+    os.makedirs(save_folder, exist_ok=True)
+    paths = []
+    for idx, link in enumerate(link_list):
+        try:
+            link = f"https://{link}" if not link.startswith(('http://', 'https://')) else link
+            res = requests.get(link, timeout=NETWORK_TIMEOUT)
+            res.raise_for_status()
+            file_path = f"{save_folder}/img_{idx}_{int(time.time())}.jpg"
+            with open(file_path, "wb") as f:
+                f.write(res.content)
+            paths.append(file_path)
+        except:
+            pass
+    return paths
+
+def download_attachment(attachment_url: str, save_folder: str = "temp_images") -> str:
+    os.makedirs(save_folder, exist_ok=True)
+    try:
+        attachment_url = f"https://{attachment_url}" if not attachment_url.startswith(('http://', 'https://')) else attachment_url
+        res = requests.get(attachment_url, timeout=NETWORK_TIMEOUT)
+        res.raise_for_status()
+        file_path = os.path.join(save_folder, f"attachment_{int(time.time())}.jpg")
+        with open(file_path, "wb") as f:
+            f.write(res.content)
+        return file_path
+    except:
+        return None
+
+# Gửi tin nhắn
+def send_message(client, text: str = None, card_data: dict = None, message_object=None, thread_id: str = None, thread_type=None, username: str = None) -> bool:
+    try:
+        # ======== GỬI ẢNH + TEXT CHUNG MỘT TIN ========
+        image_links = load_images(username)
+        local_image_paths = download_images(image_links)
+
+        if local_image_paths:
+            # Tạo message đính kèm text
+            msg = Message(text=text or "")
+
+            client.sendMultiLocalImage(
+                local_image_paths,
+                thread_id=thread_id,
+                thread_type=thread_type,
+                message=msg,            # << ảnh + text chung 1 tin
+                ttl=3600000
+            )
+
+            # xóa file ảnh tạm
+            for path in local_image_paths:
+                try:
+                    os.remove(path)
+                except:
+                    pass
+
+            time.sleep(MESSAGE_DELAY)
+
+            # tránh gửi text lần nữa
+            text = None
+
+
+        # ======== GỬI VIDEO (riêng từng tin) ========
+        video_data_list = load_videos(username)
+        for video_data in video_data_list:
+            video_url = video_data.get("normalUrl", "")
+            if not video_url:
+                continue
+
+            video_url = f"https://{video_url}" if not video_url.startswith(("http://", "https://")) else video_url
+
+            try:
+                requests.head(video_url, timeout=NETWORK_TIMEOUT, allow_redirects=True).raise_for_status()
+
+                client.sendRemoteVideo(
+                    videoUrl=video_url,
+                    thumbnailUrl=video_data.get("thumb", video_url),
+                    duration=video_data.get("duration", 1000),
+                    width=video_data.get("width", 720),
+                    height=video_data.get("height", 720),
+                    thread_id=thread_id,
+                    thread_type=thread_type,
+                    ttl=3600000
+                )
+                time.sleep(MESSAGE_DELAY)
+
+            except:
+                continue
+
+
+        # ======== GỬI TEXT NẾU KHÔNG CÓ ẢNH ========
+        if text:
+            msg = Message(text=text)
+            if message_object:
+                client.replyMessage(msg, message_object, thread_id=thread_id, thread_type=thread_type, ttl=3600000)
+            else:
+                client.sendMessage(msg, thread_id=thread_id, thread_type=thread_type, ttl=3600000)
+
+            time.sleep(MESSAGE_DELAY)
+
+
+        # ======== GỬI CARD (nếu có) ========
+        if card_data and card_data.get("uid") and card_data.get("content"):
+            user_info = client.fetchUserInfo(card_data["uid"]).get(card_data["uid"], {})
+            avatar_url = user_info.get("avatar", "")
+
+            client.sendBusinessCard(
+                userId=card_data["uid"],
+                qrCodeUrl=avatar_url,
+                phone=card_data["content"],
+                thread_id=thread_id,
+                thread_type=thread_type,
+                ttl=3600000
+            )
+
+            time.sleep(MESSAGE_DELAY)
+
+        return True
+
+    except Exception as e:
+        logging.error(f"Lỗi gửi tin nhắn tới nhóm {thread_id}: {e}")
+        return False
+
+
+# Vòng lặp rải
+def rai_loop(client, thread_id: str, username: str):
+    try:
+        while rai_state.get(username, {}).get(thread_id, {}).get('running', False):
+            msg_text = load_rai_message(username).strip()
+            card_data = load_card(username)
+            if msg_text or card_data.get('uid') or load_images(username) or load_videos(username):
+                send_message(client, msg_text, card_data, thread_id=thread_id, thread_type=ThreadType.GROUP, username=username)
+            time.sleep(load_rai_time(username) * 60)
+    except Exception as e:
+        logging.error(f"Lỗi trong rai_loop nhóm {thread_id}: {e}")
+    finally:
+        with state_lock:
+            if username in rai_state and thread_id in rai_state[username]:
+                rai_state[username][thread_id]['running'] = False
+                if 'thread' in rai_state[username][thread_id]:
+                    del rai_state[username][thread_id]['thread']
+                del rai_state[username][thread_id]
+                if not rai_state[username]:
+                    del rai_state[username]
+
+def rai_all_loop(client, username: str):
+    try:
+        all_groups = client.fetchAllGroups()
+        group_ids = list(all_groups.gridVerMap.keys()) if all_groups and hasattr(all_groups, 'gridVerMap') else []
+        if not group_ids:
+            return
+        while rai_all_state.get(username, {}).get('running', False):
+            msg_text = load_rai_message(username).strip()
+            card_data = load_card(username)
+            if not (msg_text or card_data.get('uid') or load_images(username) or load_videos(username)):
+                time.sleep(load_rai_time(username) * 60)
+                continue
+            disbox_ids = load_disbox(username)
+            for tid in group_ids:
+                if tid not in disbox_ids:
+                    send_message(client, msg_text, card_data, thread_id=tid, thread_type=ThreadType.GROUP, username=username)
+            time.sleep(load_rai_time(username) * 60)
+    except Exception as e:
+        logging.error(f"Lỗi trong rai_all_loop: {e}")
+    finally:
+        with state_lock:
+            if username in rai_all_state:
+                rai_all_state[username]['running'] = False
+                if 'thread' in rai_all_state[username]:
+                    del rai_all_state[username]['thread']
+                del rai_all_state[username]
+
+# Menu trợ giúp
+def rai_help_text() -> str:
+    return """《 HỆ THỐNG BOT AUTO RẢI 》
+➤ Bật/Tắt:
+• adv on → Bật rải trong nhóm hiện tại
+• adv off → Tắt rải trong nhóm hoặc all
+• adv all → Bật rải tất cả nhóm
+• adv status → Xem trạng thái
+➤ Disbox:
+• adv disbox → Thêm nhóm vào danh sách chặn
+• adv undisbox → Gỡ nhóm khỏi danh sách chặn
+➤ Nội dung:
+• adv set [nội dung] → Đặt nội dung rải
+• adv card set [uid] [nội dung] → Đặt danh thiếp
+• adv card clear → Xóa danh thiếp
+➤ Ảnh:
+• adv image add [url/đính kèm] → Thêm ảnh
+• adv image list → Xem danh sách ảnh
+• adv image remove [số] → Xóa ảnh
+• adv image clear → Xóa tất cả ảnh
+➤ Video:
+• adv video add [url] → Thêm video
+• adv video list → Xem danh sách video
+• adv video remove [số] → Xóa video
+• adv video clear → Xóa tất cả video
+➤ Thời gian:
+• adv time set [phút] → Đặt thời gian rải"""
+
+# Xử lý lệnh
+def handle_rai_command(message: str, message_object, thread_id: str, thread_type, author_id: str, client) -> None:
+    try:
+        username = getattr(client, 'me_name', 'Bot Không Tên')
+        ensure_data_dir(username)
+        with state_lock:
+            if username not in rai_state:
+                rai_state[username] = {}
+            if username not in rai_all_state:
+                rai_all_state[username] = {'running': False}
+
+
+        # Fix lỗi None.strip()
+        message_text = None
+        if hasattr(message_object, 'text'):
+            message_text = message_object.text
+        elif isinstance(message_object, dict) and 'text' in message_object:
+            message_text = message_object['text']
+        if message_text is None:
+            message_text = message
+        message_text = message_text.strip() if message_text else ""
+
+        attachments = []
+        if hasattr(message_object, 'attachments'):
+            attachments = message_object.attachments
+        elif isinstance(message_object, dict) and 'attachments' in message_object:
+            attachments = message_object['attachments']
+
+        parts = message_text.split(maxsplit=3)
+        if len(parts) < 2:
+            client.replyMessage(Message(text="" + rai_help_text()), message_object, thread_id, thread_type, ttl=120000)
+            return
+
+        action = parts[1].lower()
+
+        if action == "set" and len(parts) >= 3:
+            content = ' '.join(parts[2:])
+            save_rai_message(username, content)
+            client.replyMessage(Message(text=f"✔️ Đã lưu nội dung: {content}"), message_object, thread_id, thread_type, ttl=120000)
+            return
+
+        if action == "card":
+            if len(parts) < 3:
+                client.replyMessage(Message(text="😵‍💫 Cú pháp: .rai card set <uid> <nội dung> hoặc .rai card clear"), message_object, thread_id, thread_type, ttl=120000)
+                return
+            sub_action = parts[2].lower()
+            if sub_action == "clear":
+                save_card(username, {})
+                client.replyMessage(Message(text="✔️ Đã xóa danh thiếp!"), message_object, thread_id, thread_type, ttl=120000)
+                return
+            if sub_action == "set" and len(parts) >= 4:
+                sub_parts = ' '.join(parts[3:]).split(maxsplit=1)
+                if len(sub_parts) >= 2:
+                    uid, content = sub_parts[0].strip(), sub_parts[1].strip()
+                    if uid.isdigit() and content:
+                        save_card(username, {'uid': uid, 'content': content})
+                        client.replyMessage(Message(text=f"✔️ Đã lưu danh thiếp: UID {uid}, Nội dung: {content}"), message_object, thread_id, thread_type, ttl=120000)
+                        return
+                client.replyMessage(Message(text="😵‍💫 Cú pháp: .rai card set <uid> <nội dung>"), message_object, thread_id, thread_type, ttl=120000)
+                return
+
+        if action == "image":
+            if len(parts) < 3 or parts[2].lower() not in ["add", "clear", "list", "remove"]:
+                client.replyMessage(Message(text="😵‍💫 Cú pháp: .rai image add <link> hoặc clear/list/remove <số>"), message_object, thread_id, thread_type, ttl=120000)
+                return
+            sub_action = parts[2].lower()
+            image_links = load_images(username)
+            if sub_action == "clear":
+                save_images(username, [])
+                client.replyMessage(Message(text="✔️ Đã xóa tất cả ảnh!"), message_object, thread_id, thread_type, ttl=120000)
+                return
+            if sub_action == "list":
+                if not image_links:
+                    client.replyMessage(Message(text="😵‍💫 Danh sách ảnh trống!"), message_object, thread_id, thread_type, ttl=120000)
+                    return
+                list_text = "📷 Danh sách ảnh:\n" + "\n".join(f"{i+1}. {link}" for i, link in enumerate(image_links))
+                client.replyMessage(Message(text=list_text), message_object, thread_id, thread_type, ttl=120000)
+                return
+            if sub_action == "remove" and len(parts) >= 4:
+                try:
+                    index = int(parts[3]) - 1
+                    if 0 <= index < len(image_links):
+                        removed = image_links.pop(index)
+                        save_images(username, image_links)
+                        client.replyMessage(Message(text=f"✔️ Đã xóa ảnh số {index + 1}: {removed}"), message_object, thread_id, thread_type, ttl=120000)
+                        return
+                    client.replyMessage(Message(text="😵‍💫 Số thứ tự không hợp lệ!"), message_object, thread_id, thread_type, ttl=120000)
+                except ValueError:
+                    client.replyMessage(Message(text="😵‍💫 Số thứ tự phải là số nguyên!"), message_object, thread_id, thread_type, ttl=120000)
+                return
+            if sub_action == "add":
+                added = False
+                if attachments:
+                    for attachment in attachments:
+                        if isinstance(attachment, dict) and attachment.get('type') == 'image' and 'url' in attachment:
+                            url = attachment['url']
+                            if url not in image_links:
+                                image_links.append(url)
+                                save_images(username, image_links)
+                                added = True
+                elif len(parts) >= 4:
+                    url = parts[3].strip()
+                    if url not in image_links:
+                        image_links.append(url)
+                        save_images(username, image_links)
+                        added = True
+                if added:
+                    client.replyMessage(Message(text=f"✔️ Đã thêm ảnh: {url if 'url' in locals() else 'đính kèm'}"), message_object, thread_id, thread_type, ttl=120000)
+                else:
+                    client.replyMessage(Message(text="😵‍💫 Ảnh đã có hoặc link không hợp lệ!"), message_object, thread_id, thread_type, ttl=120000)
+                return
+
+        # Tương tự cho video, time, disbox, undisbox, status, on, all, off - giữ nguyên logic, rút gọn if/else
+        if action == "video":
+            if len(parts) < 3 or parts[2].lower() not in ["add", "clear", "list", "remove"]:
+                client.replyMessage(Message(text="😵‍💫 Cú pháp: .rai video add <link> hoặc clear/list/remove <số>"), message_object, thread_id, thread_type, ttl=120000)
+                return
+            sub_action = parts[2].lower()
+            video_list = load_videos(username)
+            if sub_action == "clear":
+                save_videos(username, [])
+                client.replyMessage(Message(text="✔️ Đã xóa tất cả video!"), message_object, thread_id, thread_type, ttl=120000)
+                return
+            if sub_action == "list":
+                if not video_list:
+                    client.replyMessage(Message(text="😵‍💫 Danh sách video trống!"), message_object, thread_id, thread_type, ttl=120000)
+                    return
+                list_text = "🎥 Danh sách video:\n" + "\n".join(f"{i+1}. {v['normalUrl']}" for i, v in enumerate(video_list))
+                client.replyMessage(Message(text=list_text), message_object, thread_id, thread_type, ttl=120000)
+                return
+            if sub_action == "remove" and len(parts) >= 4:
+                try:
+                    index = int(parts[3]) - 1
+                    if 0 <= index < len(video_list):
+                        removed = video_list.pop(index)['normalUrl']
+                        save_videos(username, video_list)
+                        client.replyMessage(Message(text=f"✔️ Đã xóa video số {index + 1}: {removed}"), message_object, thread_id, thread_type, ttl=120000)
+                        return
+                    client.replyMessage(Message(text="😵‍💫 Số thứ tự không hợp lệ!"), message_object, thread_id, thread_type, ttl=120000)
+                except ValueError:
+                    client.replyMessage(Message(text="😵‍💫 Số thứ tự phải là số nguyên!"), message_object, thread_id, thread_type, ttl=120000)
+                return
+            if sub_action == "add" and len(parts) >= 4:
+                video_url = parts[3].strip()
+                video_url = f"https://{video_url}" if not video_url.startswith(('http://', 'https://')) else video_url
+                video_data = {"normalUrl": video_url, "thumb": video_url, "duration": 10000, "width": 720, "height": 720}
+                if video_url not in [v["normalUrl"] for v in video_list]:
+                    video_list.append(video_data)
+                    save_videos(username, video_list)
+                    client.replyMessage(Message(text=f"✔️ Đã thêm video: {video_url}"), message_object, thread_id, thread_type, ttl=120000)
+                else:
+                    client.replyMessage(Message(text="😵‍💫 Video đã có!"), message_object, thread_id, thread_type, ttl=120000)
+                return
+
+        if action == "time" and len(parts) >= 4 and parts[2].lower() == "set":
+            try:
+                minutes = int(parts[3])
+                if minutes >= 1:
+                    save_rai_time(username, minutes)
+                    client.replyMessage(Message(text=f"✔️ Đã đặt thời gian: {minutes} phút"), message_object, thread_id, thread_type, ttl=120000)
+                    return
+                client.replyMessage(Message(text="😵‍💫 Thời gian tối thiểu là 1 phút!"), message_object, thread_id, thread_type, ttl=120000)
+            except ValueError:
+                client.replyMessage(Message(text="😵‍💫 Số phút phải là số nguyên!"), message_object, thread_id, thread_type, ttl=120000)
+            return
+
+        if action == "disbox":
+            disbox_ids = load_disbox(username)
+            if thread_id not in disbox_ids:
+                disbox_ids.append(thread_id)
+                save_disbox(username, disbox_ids)
+                client.replyMessage(Message(text="✔️ Đã thêm nhóm vào danh sách chặn"), message_object, thread_id, thread_type, ttl=120000)
+            else:
+                client.replyMessage(Message(text="😵‍💫 Nhóm đã trong danh sách chặn!"), message_object, thread_id, thread_type, ttl=120000)
+            return
+
+        if action == "undisbox":
+            disbox_ids = load_disbox(username)
+            if thread_id in disbox_ids:
+                disbox_ids.remove(thread_id)
+                save_disbox(username, disbox_ids)
+                client.replyMessage(Message(text="✔️ Đã gỡ nhóm khỏi danh sách chặn"), message_object, thread_id, thread_type, ttl=120000)
+            else:
+                client.replyMessage(Message(text="😵‍💫 Nhóm không có trong danh sách chặn!"), message_object, thread_id, thread_type, ttl=120000)
+            return
+
+        if action == "status":
+            msg_text = load_rai_message(username).strip()
+            card_data = load_card(username)
+            time_interval = load_rai_time(username)
+            disbox_ids = load_disbox(username)
+            image_links = load_images(username)
+            video_list = load_videos(username)
+            status = (
+                f"📊 Trạng thái Auto Rải:\n"
+                f"• Nội dung: {msg_text or 'Chưa thiết lập'}\n"
+                f"• Danh thiếp: {'Đã thiết lập' if card_data.get('uid') else 'Chưa thiết lập'}\n"
+                f"  UID: {card_data.get('uid', 'Chưa thiết lập')}\n"
+                f"  Nội dung: {card_data.get('content', 'Chưa thiết lập')}\n"
+                f"• Ảnh: {len(image_links)} ảnh\n"
+                f"• Video: {len(video_list)} video\n"
+                f"• Thời gian: {time_interval} phút\n"
+                f"• Rải nhóm: {'Bật' if rai_state.get(username, {}).get(thread_id, {}).get('running', False) else 'Tắt'}\n"
+                f"• Rải ALL: {'Bật' if rai_all_state.get(username, {}).get('running', False) else 'Tắt'}\n"
+                f"• Nhóm chặn: {len(disbox_ids)} nhóm\n"
+            )
+            client.replyMessage(Message(text=status), message_object, thread_id, thread_type, ttl=120000)
+            return
+
+        if action == "on":
+            disbox_ids = load_disbox(username)
+            if thread_id in disbox_ids:
+                client.replyMessage(Message(text="⛔ Nhóm này bị chặn rải!"), message_object, thread_id, thread_type, ttl=120000)
+                return
+            if not (load_rai_message(username).strip() or load_card(username).get('uid') or load_images(username) or load_videos(username)):
+                client.replyMessage(Message(text="😵‍💫 Chưa có nội dung để rải!"), message_object, thread_id, thread_type, ttl=120000)
+                return
+            with state_lock:
+                if rai_state[username].get(thread_id, {}).get('running', False):
+                    client.replyMessage(Message(text="⛔ Rải đã bật trong nhóm này!"), message_object, thread_id, thread_type, ttl=120000)
+                    return
+                rai_state[username][thread_id] = {'running': True}
+            thread = threading.Thread(target=rai_loop, args=(client, thread_id, username), daemon=True)
+            with state_lock:
+                rai_state[username][thread_id]['thread'] = thread
+            thread.start()
+            client.replyMessage(Message(text="✔️ Đã bật rải trong nhóm này!"), message_object, thread_id, thread_type, ttl=120000)
+            return
+
+        if action == "all":
+            if not (load_rai_message(username).strip() or load_card(username).get('uid') or load_images(username) or load_videos(username)):
+                client.replyMessage(Message(text="😵‍💫 Chưa có nội dung để rải!"), message_object, thread_id, thread_type, ttl=120000)
+                return
+            with state_lock:
+                if rai_all_state[username].get('running', False):
+                    client.replyMessage(Message(text="⛔ Rải ALL đã bật!"), message_object, thread_id, thread_type, ttl=120000)
+                    return
+                rai_all_state[username]['running'] = True
+            thread = threading.Thread(target=rai_all_loop, args=(client, username), daemon=True)
+            with state_lock:
+                rai_all_state[username]['thread'] = thread
+            thread.start()
+            client.replyMessage(Message(text="✔️ Đã bật rải ALL nhóm!"), message_object, thread_id, thread_type, ttl=120000)
+            return
+
+        if action == "off":
+            with state_lock:
+                if rai_all_state[username].get('running', False):
+                    rai_all_state[username]['running'] = False
+                    client.replyMessage(Message(text="✔️ Đã dừng rải ALL!"), message_object, thread_id, thread_type, ttl=120000)
+                elif rai_state[username].get(thread_id, {}).get('running', False):
+                    rai_state[username][thread_id]['running'] = False
+                    client.replyMessage(Message(text="✔️ Đã dừng rải trong nhóm này!"), message_object, thread_id, thread_type, ttl=120000)
+                else:
+                    client.replyMessage(Message(text="😵‍💫 Rải chưa được bật!"), message_object, thread_id, thread_type, ttl=120000)
+            return
+
+        # Nếu không khớp lệnh, hiển thị help
+        client.replyMessage(Message(text=rai_help_text()), message_object, thread_id, thread_type, ttl=120000)
+
+    except Exception as e:
+        logging.error(f"Lỗi xử lý lệnh rai: {e}")
+        try:
+            client.replyMessage(Message(text=f"❌ Lỗi: {str(e)}"), message_object, thread_id, thread_type, ttl=120000)
+        except:
+            pass
+
+def PTA():
+    return {
+        'rai': handle_rai_command
+    }

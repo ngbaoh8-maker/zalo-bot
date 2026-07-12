@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zalo Bot Manager Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="glow-bg"></div>
+    
+    <div class="app-container">
+        <!-- Sidebar / Brand -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-logo">
+                    <i class="fa-solid fa-robot"></i>
+                </div>
+                <div class="brand-name">
+                    <h2>ZaloBot</h2>
+                    <span>v2.0 Dashboard</span>
+                </div>
+            </div>
+            
+            <nav class="side-nav">
+                <a href="#" class="nav-item active"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
+                <a href="https://zalo.me/g/ur58vacl0hhscxjwfzsj" target="_blank" class="nav-item"><i class="fa-solid fa-users"></i> Nhóm Hỗ Trợ</a>
+            </nav>
+            
+            <div class="bot-status-card">
+                <div class="status-indicator" id="sidebar-status-indicator"></div>
+                <div class="status-info">
+                    <span class="status-label">Trạng thái</span>
+                    <span class="status-value" id="sidebar-status-text">Đang Dừng</span>
+                </div>
+            </div>
+        </aside>
+        
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Top Navbar -->
+            <header class="top-bar">
+                <div class="page-title">
+                    <h1>Bảng Điều Khiển Bot Zalo</h1>
+                    <p>Đăng nhập, cấu hình và quản lý tiến trình bot của bạn</p>
+                </div>
+                <div class="system-stats">
+                    <div class="stat-item">
+                        <span class="stat-val" id="stat-bot-name">-</span>
+                        <span class="stat-lbl">Tên Bot</span>
+                    </div>
+                </div>
+            </header>
+            
+            <div class="dashboard-grid">
+                <!-- QR Login Card -->
+                <section class="glass-card qr-card">
+                    <div class="card-header">
+                        <div class="card-icon"><i class="fa-solid fa-qrcode"></i></div>
+                        <div class="card-title">
+                            <h3>Đăng Nhập Zalo</h3>
+                            <p>Quét mã QR để kết nối tài khoản bot</p>
+                        </div>
+                    </div>
+                    
+                    <div class="qr-container">
+                        <div class="qr-box" id="qr-box">
+                            <!-- Loading state -->
+                            <div class="qr-placeholder" id="qr-placeholder">
+                                <i class="fa-solid fa-spinner fa-spin qr-spinner"></i>
+                                <p>Đang chuẩn bị mã QR...</p>
+                            </div>
+                            <!-- QR Image -->
+                            <img src="" id="qr-image" class="qr-img hidden" alt="Zalo QR Login">
+                        </div>
+                        <button class="btn btn-primary" id="btn-generate-qr"><i class="fa-solid fa-rotate"></i> Lấy Mã QR Mới</button>
+                    </div>
+                    
+                    <div class="qr-status-msg" id="qr-status-msg">
+                        <span class="badge badge-info">Idle</span> Nhấn nút để lấy mã QR đăng nhập
+                    </div>
+                </section>
+                
+                <!-- Config Card -->
+                <section class="glass-card config-card">
+                    <div class="card-header">
+                        <div class="card-icon"><i class="fa-solid fa-sliders"></i></div>
+                        <div class="card-title">
+                            <h3>Cấu Hình Bot</h3>
+                            <p>Thiết lập thông số cơ bản cho bot</p>
+                        </div>
+                    </div>
+                    
+                    <form class="config-form" id="config-form">
+                        <div class="form-group">
+                            <label for="bot-name"><i class="fa-solid fa-tag"></i> Tên Bot</label>
+                            <input type="text" id="bot-name" placeholder="Ví dụ: Bảo Bot" required>
+                            <small class="form-help">Tên hiển thị và phản hồi của bot (thay thế {name})</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="admin-id"><i class="fa-solid fa-user-shield"></i> ID Admin</label>
+                            <input type="text" id="admin-id" placeholder="Ví dụ: 637876082720685615" required>
+                            <small class="form-help">ID tài khoản Zalo của admin tối cao</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="bot-prefix"><i class="fa-solid fa-hashtag"></i> Prefix Lệnh</label>
+                            <input type="text" id="bot-prefix" placeholder="Ví dụ: ?" required maxlength="5">
+                            <small class="form-help">Ký tự đứng trước mỗi lệnh của bot</small>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-success" id="btn-save-config"><i class="fa-solid fa-floppy-disk"></i> Lưu Cấu Hình</button>
+                        </div>
+                    </form>
+                    
+                    <div class="control-actions">
+                        <h4 class="control-title"><i class="fa-solid fa-power-off"></i> Điều Khiển Bot</h4>
+                        <div class="btn-group">
+                            <button class="btn btn-start" id="btn-start-bot"><i class="fa-solid fa-play"></i> START BOT</button>
+                            <button class="btn btn-stop" id="btn-stop-bot" disabled><i class="fa-solid fa-stop"></i> STOP BOT</button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+            
+            <!-- Terminal Console Logs -->
+            <section class="glass-card console-card">
+                <div class="card-header console-header">
+                    <div class="card-title">
+                        <h3><i class="fa-solid fa-terminal"></i> Console Log</h3>
+                        <p>Tiến trình và nhật ký hoạt động của bot</p>
+                    </div>
+                    <div class="console-actions">
+                        <button class="console-btn" id="btn-clear-console" title="Xóa màn hình"><i class="fa-solid fa-trash-can"></i></button>
+                        <button class="console-btn" id="btn-auto-scroll" title="Tự động cuộn" class="active"><i class="fa-solid fa-angles-down"></i></button>
+                    </div>
+                </div>
+                
+                <div class="terminal-body" id="terminal-body">
+                    <div class="terminal-line system-line">[SYSTEM] Sẵn sàng điều khiển. Chờ lệnh từ bảng điều khiển...</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

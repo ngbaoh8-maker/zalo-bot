@@ -1,0 +1,49 @@
+﻿import json
+import os
+
+def read_setting_value(key):
+    try:
+        path = os.path.join(os.path.dirname(__file__), 'seting.json')
+        with open(path, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+        return settings.get(key)
+    except FileNotFoundError:
+        print(f"Lỗi: Không tìm thấy file seting.json. Sử dụng giá trị mặc định cho {key}.")
+        return None
+    except json.JSONDecodeError:
+        print(f"Lỗi: File seting.json không hợp lệ. Sử dụng giá trị mặc định cho {key}.")
+        return None
+
+def read_prefix():
+    return read_setting_value('prefix') or "?"
+
+def read_admin():
+    return read_setting_value('admin') or "789382913243202989"
+
+IMEI = "ed26c302-18f2-4b6b-b644-a03d8b567665-7675d59b5e84e0a878ee6f0a97f9056f"
+
+SESSION_COOKIES = {
+    "_gid": "GA1.2.1503347737.1769145046",
+    "_ga_YS1V643LGV": "GS2.1.s1769145046$o1$g0$t1769145047$j59$l0$h0",
+    "_ga_RYD7END4JE": "GS2.2.s1769145048$o1$g1$t1769145048$j60$l0$h0",
+    "_zlang": "vn",
+    "_ga": "GA1.2.326437709.1769145046",
+    "__zi": "3000.SSZzejyD6zOgdh2mtnLQWYQN_RAG01ICFjIXe9fEM8WzdUgidqfVX7USxQxQIbo7VflfgJKu.1",
+    "__zi-legacy": "3000.SSZzejyD6zOgdh2mtnLQWYQN_RAG01ICFjIXe9fEM8WzdUgidqfVX7USxQxQIbo7VflfgJKu.1",
+    "ozi": "2000.QOBlzDCV2uGerkFzm09VrcFIwFtF15xJ9zBi-Oe4NT0krUZ-DJW.1",
+    "app.event.zalo.me": "7498337219254143622",
+    "_ga_3EM8ZPYYN3": "GS2.2.s1769173691$o3$g0$t1769173691$j60$l0$h0",
+    "zpsid": "WG1a.434786004.68.87dTfN0EBKIaGCTTV0ujH0LzNt13EXfyHZuTS7wkkDYTTlRaSUXVDnaEBKG",
+    "zpw_sek": "FtC3.434786004.a0.NUBCjpszOElfyuho7BrWwqQV1O0VXqAoUEGJdbRG4uC4oWtO4iyEiLJQ4DjQW5t9GBF0Vg5G632Tl8UPJjHWwm"
+}
+
+API_KEY = 'api_key'
+SECRET_KEY = 'secret_key'
+PREFIX = read_prefix()
+ADMIN = read_admin()
+GEMINI_API_KEY = "AIzaSyBiKqIS4xlwQHMlsv7MLzeRoYl_5ppalSU"
+
+# Telegram configuration (optional)
+TELEGRAM_BOT_TOKEN = None  # Set your Telegram bot token here if needed
+TELEGRAM_CHAT_ID = None    # Set your Telegram chat ID here if needed
+ENABLE_TELEGRAM = False    # Set to True to enable Telegram notifications

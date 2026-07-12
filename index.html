@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>FC Mobile Account Checker</title>
+    <style>
+        body { font-family: Arial; background:#111; color:#eee; }
+        .box { width:350px; margin:100px auto; padding:20px; background:#1e1e1e; border-radius:8px; }
+        input, button { width:100%; padding:10px; margin-top:10px; }
+        .live { color:#00ff88; }
+        .die { color:#ff4444; }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <h2>FC Mobile Check (Demo)</h2>
+    <form method="post">
+        <input name="email" placeholder="Email">
+        <input name="password" placeholder="Password">
+        <button>CHECK</button>
+    </form>
+
+    {% if result %}
+        <hr>
+        <p class="{{ result.status }}">
+            Status: {{ result.status | upper }}
+        </p>
+        <p>{{ result.message }}</p>
+        {% if result.status == "live" %}
+            <p>Level: {{ result.level }}</p>
+            <p>OVR: {{ result.team_ovr }}</p>
+        {% endif %}
+    {% endif %}
+</div>
+
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "hp": 0,
+  "level": 1,
+  "drop": [],
+  "active": false,
+  "name": "mèo",
+  "max_hp": 5,
+  "reward": 1,
+  "attackers": {
+    "700542342650452398": 16
+  }
+}

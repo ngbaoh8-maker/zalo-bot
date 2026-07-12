@@ -1,0 +1,31 @@
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Large files (exceeds GitHub 100MB limit)
+code/
+*.zip
+*.7z
+*.pyo
+*.pyd
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDE configurations
+.vscode/
+.idea/
+
+# Local databases and logs
+*.log
+database/dataundo.json
+database/datasticker.json
+active_threads.json
+failed_links.json
+device_ids.json
+
+# Local web manager assets
+web_manager/static/zalo_qr.png

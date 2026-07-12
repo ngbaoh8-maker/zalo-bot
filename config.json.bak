@@ -1,0 +1,48 @@
+{
+    "data": [
+        {
+            "prefix": ">",
+            "session_cookies": {
+                "_ga_YT9TMXZYV9": "GS2.1.s1765703981$o1$g0$t1765703981$j60$l0$h0",
+                "_ga": "GA1.2.1142668768.1765703821",
+                "__zi": "3000.SSZzejyD6zOgdh2mtnLQWYQN_RAG01ICFjIXe9fEM8W_dkYcaqfUWtkSxAdQJ5c6TflegZOo.1",
+                "__zi-legacy": "3000.SSZzejyD6zOgdh2mtnLQWYQN_RAG01ICFjIXe9fEM8W_dkYcaqfUWtkSxAdQJ5c6TflegZOo.1",
+                "ozi": "2000.QOBlzDCV2uGerkFzm09VqcpTw_x10bdQATJhy8W4Njyaq-_pDZ8.1",
+                "_ga_3EM8ZPYYN3": "GS2.2.s1766214877$o2$g0$t1766214877$j60$l0$h0",
+                "zpsid": "apZj.417528339.13.gmF_UXOdIsq5tQbr6YTBRMDKELad47vVBXHuL6Sninke0ElT5oq6AtydIsq",
+                "zpw_sek": "dBkZ.417528339.a0.u7TrCyYPbS_ROtVNwPcLpxExyAJgexV-ajhV_RtxmA6Rt-UQiVIifARHfwoPfAZjjUY3Dxudiczuc9w2Zl2Lpm",
+                "_zlang": "vn",
+                "app.event.zalo.me": "3437293183723352378"
+            },
+            "imei": "3b4907e7-2f5b-40c7-94d0-2629b72a2dbb-f318d71f51e2f42138d3a75f6a7137a8",
+            "is_main_bot": false,
+            "username": "Dexry W Duc Duy",
+            "author_id": "833018801528797356",
+            "status": false,
+            "kich_hoat": "11/01/2026",
+            "het_han": "12/01/2026"
+        },
+        {
+            "prefix": "!",
+            "session_cookies": {
+                "_ga": "GA1.2.1918965024.1765777316",
+                "__zi": "3000.SSZzejyD6zOgdh2mtnLQWYQN_RAG01ICFjIXe9fEM8W_cEsdcaTRWdAHwQZJGLk3TP_gfZ4o.1",
+                "__zi-legacy": "3000.SSZzejyD6zOgdh2mtnLQWYQN_RAG01ICFjIXe9fEM8W_cEsdcaTRWdAHwQZJGLk3TP_gfZ4o.1",
+                "ozi": "2000.QOBlzDCV2uGerkFzm09VqctGwFV00LtVADVlzOa7NTulsUpxCJ8.1",
+                "_ga_3EM8ZPYYN3": "GS2.2.s1766216003$o2$g0$t1766216003$j60$l0$h0",
+                "zpsid": "UZlH.411031839.13.cJ1bH7PwAp1ferGeUdehC0C9MGH7Ini3Hq8O2LmFkid8NOk0TmbwTXzwAp0",
+                "zpw_sek": "NboA.411031839.a0.bbilgVm1eLVZsDvFtG6XLuSZn3pUEuCWkLJoFv5OwoIfQUKUcZ2IFAvaqGARF9nrWIlKnWM_XlTC0DK6kcYXLm",
+                "_zlang": "vn",
+                "app.event.zalo.me": "2561769655554179844",
+                "_gid": "GA1.2.1893086303.1766877939"
+            },
+            "imei": "8b584a6b-df4e-4c82-a3fb-e9e4134d7517-f318d71f51e2f42138d3a75f6a7137a8",
+            "is_main_bot": false,
+            "username": "Xthai X Adr",
+            "author_id": "554494924075387538",
+            "status": false,
+            "kich_hoat": "11/01/2026",
+            "het_han": "12/01/2026"
+        }
+    ]
+}

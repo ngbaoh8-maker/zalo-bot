@@ -1,0 +1,114 @@
+import requests
+import threading
+import random
+import os
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from zlapi.models import Message
+
+# Cấu hình đường dẫn
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CACHE_PATH = os.path.join(ROOT_DIR, "modules/cache")
+# Đảm bảo bạn có font chữ trong thư mục này
+FONT_PATH = os.path.join(CACHE_PATH, "font/BeVietnamPro-Bold.ttf")
+
+if not os.path.exists(CACHE_PATH):
+    os.makedirs(CACHE_PATH)
+
+des = {
+    'version': "1.0.0",
+    'credits': "Gemini Pro",
+    'description': "Check độ Gay/Les với giao diện Scanner",
+    'power': "Thành viên"
+}
+
+def create_scan_image(user_name, user_avatar_url, mode="gay"):
+    # Cấu hình màu sắc theo Mode
+    if mode == "gay":
+        main_color = (0, 191, 255) # Deep Sky Blue
+        title_text = "KIỂM TRA ĐỘ GAY"
+        prob_label = "GAY PROBABILITY:"
+        logs = ["TÍN HIỆU GAY CAO", "Cần thêm dầu ăn", "Độ rực rỡ đạt đỉnh"]
+    else:
+        main_color = (255, 20, 147) # Deep Pink
+        title_text = "KIỂM TRA ĐỘ LES"
+        prob_label = "LESBIAN PROBABILITY:"
+        logs = ["TÍN HIỆU LESBIAN CAO", "Có hướng bảo vệ chị em", "Hội chị em gọi tên"]
+
+    # 1. Tạo nền đen với họa tiết chấm bi (grid)
+    w, h = 1000, 560
+    img = Image.new('RGB', (w, h), color=(10, 10, 15))
+    draw = ImageDraw.Draw(img)
+    
+    for x in range(0, w, 40):
+        for y in range(0, h, 40):
+            draw.ellipse([x, y, x+2, y+2], fill=(40, 40, 60))
+
+    # 2. Xử lý Avatar
+    avatar_path = os.path.join(CACHE_PATH, "temp_avt.png")
+    with open(avatar_path, 'wb') as f:
+        f.write(requests.get(user_avatar_url).content)
+    
+    avt = Image.open(avatar_path).convert("RGB").resize((250, 250))
+    # Khung avatar
+    draw.rectangle([75, 125, 335, 385], outline=main_color, width=3)
+    img.paste(avt, (80, 130))
+    # Đường quét hồng/xanh ngang avatar
+    draw.line([(70, 255), (345, 255)], fill=main_color, width=3)
+
+    # 3. Viết chữ và thông số
+    try:
+        font_title = ImageFont.truetype(FONT_PATH, 50)
+        font_id = ImageFont.truetype(FONT_PATH, 40)
+        font_small = ImageFont.truetype(FONT_PATH, 22)
+        font_big = ImageFont.truetype(FONT_PATH, 110)
+    except:
+        font_title = font_id = font_small = font_big = ImageFont.load_default()
+
+    # Tiêu đề (Màu hồng/xanh rực rỡ)
+    draw.text((w//2, 50), title_text, font=font_title, fill=main_color, anchor="mm")
+    
+    # ID và Phần trăm
+    draw.text((420, 130), f"ID: {user_name.upper()}", font=font_id, fill="white")
+    draw.text((420, 190), prob_label, font=font_small, fill=main_color)
+    
+    percent = random.randint(1, 100)
+    draw.text((420, 220), f"{percent}%", font=font_big, fill=main_color)
+    
+    # Thanh Progress Bar
+    draw.rectangle([420, 340, 900, 350], outline=main_color, width=2)
+    draw.rectangle([422, 342, 422 + int((900-420)*(percent/100)), 348], fill=main_color)
+
+    # Log cảnh báo
+    log_text = f"LOG: CẢNH BÁO: {random.choice(logs)}"
+    draw.text((420, 380), log_text, font=font_small, fill="white")
+
+    # Footer thông tin
+    draw.text((30, 530), f"SCANNER_UID: .check{mode} • @{user_name}", font=font_small, fill=(100, 100, 150))
+    draw.text((800, 530), "STATUS: DEEP_SCAN", font=font_small, fill=(100, 100, 150))
+
+    final_path = os.path.join(CACHE_PATH, f"result_{mode}.png")
+    img.save(final_path)
+    return final_path
+
+def handle_check_lgbt(message, message_object, thread_id, thread_type, author_id, client):
+    def process():
+        path = None
+        try:
+            mode = "gay" if "{prefix}checkgay" in message.lower() else "les"
+            user_info = client.fetchUserInfo(author_id)[author_id]
+            name = user_info.name
+            avatar = user_info.avatar
+
+            client.sendReaction(message_object, "🔍", thread_id, thread_type)
+            path = create_scan_image(name, avatar, mode)
+            
+            client.sendLocalImage(path, thread_id, thread_type, message=Message(text=f"🤖 Đã quét xong đối tượng {name}!"))
+        except Exception as e:
+            client.replyMessage(Message(text=f"Lỗi: {e}"), message_object, thread_id, thread_type)
+        finally:
+            if path and os.path.exists(path): os.remove(path)
+
+    threading.Thread(target=process, daemon=True).start()
+
+def PTA():
+    return {'checkgay': handle_check_lgbt, 'checkles': handle_check_lgbt}

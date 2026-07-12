@@ -1,0 +1,118 @@
+import os
+import time
+import threading
+import calendar
+from datetime import datetime
+from PIL import Image, ImageDraw, ImageFont
+from zlapi.models import Message
+
+# --- Cấu hình đường dẫn ---
+CACHE_PATH = "modules/cache"
+FONT_BOLD = "modules/cache/font/BeVietnamPro-Bold.ttf"
+FONT_REG = "modules/cache/font/BeVietnamPro-Regular.ttf"
+
+des = {
+    'version': "4.1.0",
+    'credits': "Tân Xuân Hoàng",
+    'description': "Lịch & Sự kiện không đè chữ, đếm ngược thông minh",
+    'power': "Thành viên"
+}
+
+def get_font(path, size):
+    try: return ImageFont.truetype(path, size)
+    except: return ImageFont.load_default()
+
+def handle_lich_command(message, message_object, thread_id, thread_type, author_id, client):
+    def process():
+        try:
+            client.sendReaction(message_object, "📅", thread_id, thread_type)
+            
+            now = datetime.now()
+            day, month, year = now.day, now.month, now.year
+            
+            # Tạo khung ảnh
+            width, height = 700, 1000
+            img = Image.new('RGB', (width, height), color=(255, 255, 255))
+            draw = ImageDraw.Draw(img)
+
+            # Viền trang trí
+            draw.rectangle([5, 5, width-5, height-5], outline=(255, 0, 0), width=3)
+
+            # 1. Vẽ Icon Lịch giả lập (Giữ khoảng cách để không đè)
+            draw.rectangle([200, 40, 500, 320], outline=(200, 200, 200), width=10)
+            draw.text((350, 180), str(day), font=get_font(FONT_BOLD, 150), fill=(211, 47, 47), anchor="mm")
+
+            # 2. Tiêu đề
+            draw.text((40, 360), "LỊCH & SỰ KIỆN", font=get_font(FONT_BOLD, 45), fill=(33, 33, 33))
+
+            # 3. Logic Sự kiện (Tự động chuyển sang năm sau nếu đã qua)
+            events_raw = [
+                ("Ngày Nhà giáo VN", "20/11", "🎉"),
+                ("Thành lập Quốc hội", "06/01", "🎁"),
+                ("Tết Dương lịch", "01/01", "🍏"),
+                ("Giỗ Tổ Hùng Vương", "05/04", "🕯️"),
+                ("Giải phóng Miền Nam", "30/04", "🇻🇳")
+            ]
+            
+            y_offset = 440
+            f_event_name = get_font(FONT_BOLD, 22)
+            f_event_sub = get_font(FONT_REG, 18)
+            
+            for name, date_str, icon in events_raw:
+                d, m = map(int, date_str.split('/'))
+                target_date = datetime(year, m, d)
+                
+                # Nếu ngày lễ đã qua trong năm nay, tính cho năm sau
+                if target_date < now.replace(hour=0, minute=0, second=0, microsecond=0):
+                    target_date = datetime(year + 1, m, d)
+                
+                days_left = (target_date - now).days + 1
+                
+                # Vẽ icon
+                draw.text((40, y_offset), icon, font=get_font(FONT_REG, 30))
+                # Vẽ tên sự kiện
+                draw.text((90, y_offset), name, font=f_event_name, fill=(50, 50, 50))
+                # Vẽ đếm ngược (Cách dòng ra để không đè)
+                draw.text((90, y_offset + 30), f"Còn {days_left} ngày nữa ({target_date.strftime('%d/%m/%Y')})", font=f_event_sub, fill=(100, 100, 100))
+                
+                y_offset += 90 # Tăng khoảng cách dòng để không bị đè
+
+            # 4. Vẽ Bảng Lịch Tháng (Căn chỉnh lại tọa độ)
+            cal = calendar.monthcalendar(year, month)
+            draw.text((420, 440), f"Tháng {month} / {year}", font=get_font(FONT_BOLD, 30), fill=(80, 80, 80))
+            
+            headers = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"]
+            for i, h in enumerate(headers):
+                draw.text((420 + i*38, 490), h, font=get_font(FONT_BOLD, 20), fill=(211, 47, 47))
+
+            for r, week in enumerate(cal):
+                for c, d in enumerate(week):
+                    if d != 0:
+                        f_color = (255, 0, 0) if d == day else (33, 33, 33)
+                        draw.text((420 + c*38, 530 + r*40), str(d), font=get_font(FONT_REG, 20), fill=f_color)
+
+            # 5. Phần dưới: Lời chúc
+            draw.text((width//2, 820), f"Năm 2025 - Ất Tỵ", font=get_font(FONT_BOLD, 30), fill=(60, 60, 60), anchor="mm")
+            wish = "Vạn sự như ý - Tấn tài tấn lộc\nChúc bạn một ngày làm việc hiệu quả!"
+            draw.multiline_text((width//2, 880), wish, font=get_font(FONT_REG, 24), fill=(100, 100, 100), anchor="mm", align="center")
+
+            # Footer
+            draw.text((width//2, 960), "© Bot DucDuy", font=get_font(FONT_BOLD, 22), fill=(180, 180, 180), anchor="mm")
+
+            # 6. Lưu và Gửi
+            path = os.path.join(CACHE_PATH, f"lich_fixed_{author_id}.png")
+            img.save(path)
+            
+            client.sendLocalImage(path, thread_id, thread_type, message=Message(text=f"📅 Lịch ngày {day}/{month}/{year} của bạn đây!"))
+            
+            if os.path.exists(path):
+                os.remove(path)
+
+        except Exception as e:
+            print(f"Lỗi: {e}")
+            client.replyMessage(Message(text=f"❌ Lỗi vẽ lịch: {str(e)}"), message_object, thread_id, thread_type)
+
+    threading.Thread(target=process, daemon=True).start()
+
+def PTA():
+    return {'lich': handle_lich_command}
