@@ -220,6 +220,73 @@ def get_bot_logs():
         "logs": bot_runner.get_logs()
     })
 
+@app.route('/api/pip/install', methods=['POST'])
+def pip_install():
+    """Install a specific Python package by name."""
+    data = request.json or {}
+    package = data.get('package', '').strip()
+    if not package:
+        return jsonify({"status": "error", "message": "Tên thư viện không được để trống!"})
+    
+    # Basic safety check - no shell injection
+    if any(c in package for c in [';', '&', '|', '`', '$', '>', '<', '\n', '\r']):
+        return jsonify({"status": "error", "message": "Tên thư viện không hợp lệ!"})
+    
+    def run_install():
+        bot_runner.log_message(f"[PIP] Đang cài đặt: {package}...\n")
+        try:
+            proc = subprocess.Popen(
+                [sys.executable, '-m', 'pip', 'install', package, '--no-cache-dir'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding='utf-8',
+                errors='replace'
+            )
+            for line in proc.stdout:
+                bot_runner.log_message(line)
+            proc.wait()
+            if proc.returncode == 0:
+                bot_runner.log_message(f"[PIP] ✅ Đã cài đặt thành công: {package}\n")
+            else:
+                bot_runner.log_message(f"[PIP] ❌ Cài đặt thất bại: {package} (exit code {proc.returncode})\n")
+        except Exception as e:
+            bot_runner.log_message(f"[PIP ERROR] {e}\n")
+    
+    threading.Thread(target=run_install, daemon=True).start()
+    return jsonify({"status": "success", "message": f"Đang cài đặt {package}..."})
+
+@app.route('/api/pip/install-all', methods=['POST'])
+def pip_install_all():
+    """Install all packages from requirements.txt."""
+    req_path = os.path.join(ROOT_DIR, 'requirements.txt')
+    if not os.path.exists(req_path):
+        return jsonify({"status": "error", "message": "Không tìm thấy requirements.txt!"})
+    
+    def run_install_all():
+        bot_runner.log_message("[PIP] 🔄 Bắt đầu cài đặt tất cả thư viện từ requirements.txt...\n")
+        try:
+            proc = subprocess.Popen(
+                [sys.executable, '-m', 'pip', 'install', '-r', req_path, '--no-cache-dir'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding='utf-8',
+                errors='replace'
+            )
+            for line in proc.stdout:
+                bot_runner.log_message(line)
+            proc.wait()
+            if proc.returncode == 0:
+                bot_runner.log_message("[PIP] ✅ Đã cài đặt thành công tất cả thư viện!\n")
+            else:
+                bot_runner.log_message(f"[PIP] ❌ Có lỗi khi cài đặt thư viện (exit code {proc.returncode})\n")
+        except Exception as e:
+            bot_runner.log_message(f"[PIP ERROR] {e}\n")
+    
+    threading.Thread(target=run_install_all, daemon=True).start()
+    return jsonify({"status": "success", "message": "Đang cài đặt tất cả thư viện..."})
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5050))
     print(f"Khoi dong Web Manager tai http://localhost:{port}")

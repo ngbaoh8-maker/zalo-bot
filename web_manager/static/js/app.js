@@ -36,6 +36,22 @@ document.addEventListener('DOMContentLoaded', () => {
     let qrPollInterval = null;
     let logsPollInterval = null;
     let statusPollInterval = null;
+    
+    // Library Manager elements and state
+    const btnInstallAll = document.getElementById('btn-install-all');
+    const btnPipInstall = document.getElementById('btn-pip-install');
+    const pipPackageInput = document.getElementById('pip-package-input');
+    let autoInstalledModules = new Set();
+    const pkgMapping = {
+        'PIL': 'pillow',
+        'bs4': 'beautifulsoup4',
+        'telegram': 'python-telegram-bot',
+        'jwt': 'PyJWT',
+        'yaml': 'pyyaml',
+        'mysql': 'mysql-connector-python',
+        'fitz': 'pymupdf',
+        'cv2': 'opencv-python'
+    };
 
     // ============================
     // HAMBURGER MENU
@@ -84,6 +100,15 @@ document.addEventListener('DOMContentLoaded', () => {
     btnAutoScroll.addEventListener('click', () => {
         autoScroll = !autoScroll;
         btnAutoScroll.classList.toggle('active', autoScroll);
+    });
+
+    btnInstallAll.addEventListener('click', installAllRequirements);
+    btnPipInstall.addEventListener('click', () => {
+        const pkg = pipPackageInput.value.trim();
+        if (pkg) {
+            installPackage(pkg);
+            pipPackageInput.value = '';
+        }
     });
 
     // ============================
@@ -285,6 +310,46 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function installPackage(packageName) {
+        let targetPackage = packageName.trim();
+        // Map common module names to their actual pip package names if they differ
+        if (pkgMapping[targetPackage]) {
+            targetPackage = pkgMapping[targetPackage];
+        }
+
+        appendTerminalLine(`[SYSTEM] 📦 Đang yêu cầu cài đặt thư viện: ${targetPackage}...`, 'system');
+        try {
+            const res = await fetch('/api/pip/install', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ package: targetPackage })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                appendTerminalLine(`[SYSTEM] ${data.message}`, 'success');
+            } else {
+                appendTerminalLine(`[SYSTEM ERROR] ${data.message}`, 'error');
+            }
+        } catch (err) {
+            appendTerminalLine(`[SYSTEM ERROR] Yêu cầu cài đặt thất bại: ${err.message}`, 'error');
+        }
+    }
+
+    async function installAllRequirements() {
+        appendTerminalLine('[SYSTEM] 📦 Đang yêu cầu cài đặt toàn bộ requirements.txt...', 'system');
+        try {
+            const res = await fetch('/api/pip/install-all', { method: 'POST' });
+            const data = await res.json();
+            if (data.status === 'success') {
+                appendTerminalLine(`[SYSTEM] ${data.message}`, 'success');
+            } else {
+                appendTerminalLine(`[SYSTEM ERROR] ${data.message}`, 'error');
+            }
+        } catch (err) {
+            appendTerminalLine(`[SYSTEM ERROR] Yêu cầu cài đặt thất bại: ${err.message}`, 'error');
+        }
+    }
+
     async function fetchLogs() {
         try {
             const res = await fetch('/api/bot/logs');
@@ -303,6 +368,18 @@ document.addEventListener('DOMContentLoaded', () => {
                             type = 'success';
                         }
                         appendTerminalLine(cleanLine, type);
+
+                        // Tự động phát hiện lỗi thiếu thư viện và cài đặt
+                        const moduleMatch = cleanLine.match(/ModuleNotFoundError:\s*No\s*module\s*named\s*['"]([^'"]+)['"]/i) || 
+                                            cleanLine.match(/No\s*module\s*named\s*['"]([^'"]+)['"]/i);
+                        if (moduleMatch && moduleMatch[1]) {
+                            const missingModule = moduleMatch[1].trim();
+                            if (!autoInstalledModules.has(missingModule)) {
+                                autoInstalledModules.add(missingModule);
+                                appendTerminalLine(`[SYSTEM] 💡 Phát hiện thiếu thư viện: "${missingModule}". Tự động tiến hành cài đặt...`, 'system');
+                                installPackage(missingModule);
+                            }
+                        }
                     }
                 });
             }
