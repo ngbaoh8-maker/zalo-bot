@@ -291,4 +291,25 @@ def pip_install_all():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5050))
     print(f"Khoi dong Web Manager tai http://localhost:{port}")
+    
+    # Auto-start bot on startup if configuration exists
+    try:
+        setting_path = os.path.join(ROOT_DIR, 'seting.json')
+        config_path = os.path.join(ROOT_DIR, 'config.py')
+        if os.path.exists(setting_path) and os.path.exists(config_path):
+            with open(setting_path, 'r', encoding='utf-8') as f:
+                settings = json.load(f)
+            bot_name = settings.get('name_bot')
+            admin_id = settings.get('admin')
+            prefix = settings.get('prefix', '?')
+            
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config_content = f.read()
+                
+            if bot_name and admin_id and "SESSION_COOKIES" in config_content and "SESSION_COOKIES = {}" not in config_content:
+                bot_runner.log_message("[SYSTEM] Phát hiện cấu hình cũ. Tự động khởi động bot...\n")
+                bot_runner.start(bot_name, admin_id, prefix)
+    except Exception as e:
+        print(f"Lỗi khởi động bot tự động: {e}")
+
     app.run(host='0.0.0.0', port=port, debug=False)

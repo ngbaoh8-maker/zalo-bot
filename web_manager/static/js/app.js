@@ -50,7 +50,8 @@ document.addEventListener('DOMContentLoaded', () => {
         'yaml': 'pyyaml',
         'mysql': 'mysql-connector-python',
         'fitz': 'pymupdf',
-        'cv2': 'opencv-python'
+        'cv2': 'opencv-python',
+        'audioop': 'audioop-lts'
     };
 
     // ============================
