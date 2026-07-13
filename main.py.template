@@ -2524,10 +2524,6 @@ class Client(ZaloAPI):
 
 if __name__ == "__main__":
     try:
-        if os.path.exists("session.json"):
-            os.remove("session.json")
-            logger.warning("Đã xóa file session.json cũ để bắt đầu phiên mới.")
-            
         client = Client(API_KEY, SECRET_KEY, IMEI, SESSION_COOKIES)
         from modules.rai import start_rai_scheduler
         start_rai_scheduler(client)
