@@ -36,6 +36,22 @@ document.addEventListener('DOMContentLoaded', () => {
     let qrPollInterval = null;
     let logsPollInterval = null;
     let statusPollInterval = null;
+    let authMode = 'login'; // login or register
+    
+    // Auth DOM Elements
+    const authOverlay = document.getElementById('auth-overlay');
+    const mainAppContainer = document.getElementById('main-app-container');
+    const authForm = document.getElementById('auth-form');
+    const authUsernameInput = document.getElementById('auth-username');
+    const authPasswordInput = document.getElementById('auth-password');
+    const btnAuthSubmit = document.getElementById('btn-auth-submit');
+    const authTitle = document.getElementById('auth-title');
+    const authSubtitle = document.getElementById('auth-subtitle');
+    const authToggleLink = document.getElementById('auth-toggle-link');
+    const authToggleText = document.getElementById('auth-toggle-text');
+    const authErrorMsg = document.getElementById('auth-error-msg');
+    const userDisplayName = document.getElementById('user-display-name');
+    const btnLogout = document.getElementById('btn-logout');
     
     // Library Manager elements and state
     const btnInstallAll = document.getElementById('btn-install-all');
@@ -82,10 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ============================
     // INITIALIZE
     // ============================
-    loadConfig();
-    checkBotStatus();
-    statusPollInterval = setInterval(checkBotStatus, 3000);
-    logsPollInterval = setInterval(fetchLogs, 1500);
+    checkSession();
 
     // Event Listeners
     btnGenerateQr.addEventListener('click', generateQR);
@@ -111,6 +124,10 @@ document.addEventListener('DOMContentLoaded', () => {
             pipPackageInput.value = '';
         }
     });
+
+    authToggleLink.addEventListener('click', toggleAuthMode);
+    authForm.addEventListener('submit', handleAuthSubmit);
+    btnLogout.addEventListener('click', handleLogout);
 
     // ============================
     // HELPER FUNCTIONS
@@ -386,6 +403,147 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (err) {
             console.error('Error fetching logs:', err);
+        }
+    // ============================
+    // AUTHENTICATION LOGIC
+    // ============================
+    async function checkSession() {
+        try {
+            const res = await fetch('/api/auth/session');
+            const data = await res.json();
+            if (data.logged_in) {
+                userDisplayName.innerText = data.username;
+                authOverlay.classList.add('hidden');
+                mainAppContainer.classList.remove('hidden');
+                
+                // Load user config and start monitoring
+                loadConfig();
+                checkBotStatus();
+                if (!statusPollInterval) statusPollInterval = setInterval(checkBotStatus, 3000);
+                if (!logsPollInterval) logsPollInterval = setInterval(fetchLogs, 1500);
+            } else {
+                showAuthForm();
+            }
+        } catch (err) {
+            console.error('Lỗi check session:', err);
+            showAuthForm();
+        }
+    }
+
+    function showAuthForm() {
+        authOverlay.classList.remove('hidden');
+        mainAppContainer.classList.add('hidden');
+        
+        // Stop all intervals
+        if (statusPollInterval) { clearInterval(statusPollInterval); statusPollInterval = null; }
+        if (logsPollInterval) { clearInterval(logsPollInterval); logsPollInterval = null; }
+        if (qrPollInterval) { clearInterval(qrPollInterval); qrPollInterval = null; }
+    }
+
+    function toggleAuthMode(e) {
+        e.preventDefault();
+        authErrorMsg.classList.add('hidden');
+        authUsernameInput.value = '';
+        authPasswordInput.value = '';
+        
+        if (authMode === 'login') {
+            authMode = 'register';
+            authTitle.innerText = 'Đăng Ký ZaloBot';
+            authSubtitle.innerText = 'Tạo tài khoản quản lý bot Zalo của riêng bạn';
+            btnAuthSubmit.innerText = 'Đăng Ký';
+            authToggleText.innerText = 'Đã có tài khoản?';
+            authToggleLink.innerText = 'Đăng nhập ngay';
+        } else {
+            authMode = 'login';
+            authTitle.innerText = 'Đăng Nhập ZaloBot';
+            authSubtitle.innerText = 'Quản lý phiên Zalo Bot riêng tư của bạn';
+            btnAuthSubmit.innerText = 'Đăng Nhập';
+            authToggleText.innerText = 'Chưa có tài khoản?';
+            authToggleLink.innerText = 'Đăng ký ngay';
+        }
+    }
+
+    async function handleAuthSubmit(e) {
+        e.preventDefault();
+        authErrorMsg.classList.add('hidden');
+        btnAuthSubmit.disabled = true;
+        
+        const username = authUsernameInput.value.trim();
+        const password = authPasswordInput.value;
+        
+        const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+        
+        try {
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+            
+            if (data.status === 'success') {
+                if (authMode === 'register') {
+                    // Registration success - switch to login and show success message
+                    authMode = 'login';
+                    authTitle.innerText = 'Đăng Nhập ZaloBot';
+                    authSubtitle.innerText = 'Quản lý phiên Zalo Bot riêng tư của bạn';
+                    btnAuthSubmit.innerText = 'Đăng Nhập';
+                    authToggleText.innerText = 'Chưa có tài khoản?';
+                    authToggleLink.innerText = 'Đăng ký ngay';
+                    
+                    authErrorMsg.innerText = data.message;
+                    authErrorMsg.style.backgroundColor = 'rgba(63, 185, 80, 0.15)';
+                    authErrorMsg.style.borderColor = 'rgba(63, 185, 80, 0.25)';
+                    authErrorMsg.style.color = '#3fb950';
+                    authErrorMsg.classList.remove('hidden');
+                    
+                    authUsernameInput.value = username;
+                    authPasswordInput.value = '';
+                } else {
+                    // Login success
+                    checkSession();
+                }
+            } else {
+                showAuthError(data.message);
+            }
+        } catch (err) {
+            showAuthError('Lỗi kết nối đến server: ' + err.message);
+        } finally {
+            btnAuthSubmit.disabled = false;
+        }
+    }
+
+    function showAuthError(msg) {
+        authErrorMsg.innerText = msg;
+        authErrorMsg.style.backgroundColor = 'rgba(248, 81, 73, 0.15)';
+        authErrorMsg.style.borderColor = 'rgba(248, 81, 73, 0.25)';
+        authErrorMsg.style.color = '#ff6b6b';
+        authErrorMsg.classList.remove('hidden');
+    }
+
+    async function handleLogout(e) {
+        e.preventDefault();
+        try {
+            const res = await fetch('/api/auth/logout', { method: 'POST' });
+            const data = await res.json();
+            if (data.status === 'success') {
+                showAuthForm();
+                // Clear UI fields
+                botNameInput.value = '';
+                adminIdInput.value = '';
+                botPrefixInput.value = '';
+                statBotName.innerText = '-';
+                if (mobileBotName) mobileBotName.innerText = '-';
+                
+                qrPlaceholder.innerHTML = '<i class="fa-solid fa-qrcode" style="font-size: 2.5rem; opacity: 0.3;"></i><p>Nhấn nút bên dưới để lấy mã QR</p>';
+                qrPlaceholder.classList.remove('hidden');
+                qrImage.classList.add('hidden');
+                qrStatusMsg.innerHTML = '<span class="badge badge-info">Idle</span> Nhấn nút để lấy mã QR đăng nhập';
+                
+                terminalBody.innerHTML = '<div class="terminal-line system-line">[SYSTEM] Sẵn sàng điều khiển. Chờ lệnh từ bảng điều khiển...</div>';
+            }
+        } catch (err) {
+            console.error('Logout error:', err);
         }
     }
 });

@@ -1,15 +1,25 @@
 import json
 import os
 
+# Get user context
+BOT_USER = os.environ.get('BOT_USER')
+if BOT_USER:
+    USER_DIR = os.path.join(os.path.dirname(__file__), 'users', BOT_USER)
+    os.makedirs(USER_DIR, exist_ok=True)
+else:
+    USER_DIR = os.path.dirname(__file__)
+
 def read_setting_value(key):
     try:
-        path = os.path.join(os.path.dirname(__file__), 'seting.json')
+        path = os.path.join(USER_DIR, 'seting.json')
+        if not os.path.exists(path) and BOT_USER:
+            # Fallback to root settings if user-specific settings don't exist yet
+            path = os.path.join(os.path.dirname(__file__), 'seting.json')
+            
         with open(path, 'r', encoding='utf-8') as f:
             settings = json.load(f)
         return settings.get(key)
-    except FileNotFoundError:
-        return None
-    except json.JSONDecodeError:
+    except Exception:
         return None
 
 def read_prefix():
@@ -29,5 +39,15 @@ TELEGRAM_BOT_TOKEN = None
 TELEGRAM_CHAT_ID = None    
 ENABLE_TELEGRAM = False    
 
-IMEI = 'a6e32c65-4c5a-46ec-82eb-07cf7ed6b8fc-a16ddaab909d2cf27fce353f26dd2ff2'
-SESSION_COOKIES = {"nl_b04af40bb0e193acf8a9877592394ada": "tzaoLC8i6lt5q3jLoouL_iROFqpRUN2xbzyT1penVG", "zpdid": "41V-b5tnh3uH4fIHK__0Dn0RbfvG_CWq", "zlogin_session": "kW4JGLyjCnIxFnDDLXTbH-Tj2KHV5cn5w6uKLm5JObsZBmTO3LLbHhWf7qKr8dq", "_zlang": "vn", "zpsid": "eMKnVcAlVqAZUYmFCBKa1RmxBrulj2a4l3yvK33YS6B7QNrCDu876zHf2oetbcKZy5qGSpVHHLkb3WbSPeTc1fH8R3TulmrjW4i5Dn6r2GBNM5LC9xCl6m", "__zi": "3000.QOBlzDCV2uGerkFzm0LJsMNNxlp00HVHOzwXzS485T5atgBq.1", "zpw_sek": "C9xb.458158911.a0.F6EewuhWe4O9bIKh5sPhC4r43biKN4b6SbGA1LHM4LC30oTY1byuKLfV8Lv1MrOIInKd0nKmh3gaPzM_PGnhC0"}
+def load_session():
+    try:
+        session_path = os.path.join(USER_DIR, 'session.json')
+        if os.path.exists(session_path):
+            with open(session_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return data.get('imei', ''), data.get('cookies', {})
+    except Exception:
+        pass
+    return '', {}
+
+IMEI, SESSION_COOKIES = load_session()

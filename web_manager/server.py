@@ -3,6 +3,7 @@ import sys
 import base64
 import tempfile
 import subprocess
+import hashlib
 
 # Configure UTF-8 encoding for standard streams
 try:
@@ -19,115 +20,107 @@ import time
 # Add parent directory to python path for importing zlapi
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from flask import Flask, render_template, jsonify, request, Response
+from flask import Flask, render_template, jsonify, request, Response, session
 from zlapi import ZaloAPI
 from bot_runner import BotRunner
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
+app.secret_key = os.environ.get('SECRET_KEY', 'zalo_bot_saas_super_secret_key_9988')
 
 # Root bot folder is parent of this folder
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 bot_runner = BotRunner(ROOT_DIR)
 
-# Global Zalo QR Login state
-qr_login_state = {
-    "status": "idle",       # idle, generating, generated, scanned, success, failed
-    "qr_base64": "",
-    "error_message": "",
-    "user_info": None
-}
-qr_thread = None
-qr_api_instance = None
+# User Database Helper Functions
+DB_DIR = os.path.join(ROOT_DIR, 'database')
+os.makedirs(DB_DIR, exist_ok=True)
+USERS_DB = os.path.join(DB_DIR, 'users.json')
 
-def save_login_to_config(cookies, imei):
-    config_path = os.path.join(ROOT_DIR, 'config.py')
-    
-    # Read existing config content to preserve GEMINI_API_KEY and other parameters if possible
-    # but rewrite standard parameters
-    content = f"""import json
-import os
-
-def read_setting_value(key):
+def load_users():
+    if not os.path.exists(USERS_DB):
+        return {}
     try:
-        path = os.path.join(os.path.dirname(__file__), 'seting.json')
-        with open(path, 'r', encoding='utf-8') as f:
-            settings = json.load(f)
-        return settings.get(key)
-    except FileNotFoundError:
-        return None
-    except json.JSONDecodeError:
-        return None
+        with open(USERS_DB, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
-def read_prefix():
-    return read_setting_value('prefix') or "?"
+def save_users(users):
+    with open(USERS_DB, 'w', encoding='utf-8') as f:
+        json.dump(users, f, indent=4, ensure_ascii=False)
 
-def read_admin():
-    return read_setting_value('admin') or "4589338218238535959"
+def hash_password(password):
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
-API_KEY = 'api_key'
-SECRET_KEY = 'secret_key'
-PREFIX = read_prefix()
-ADMIN = read_admin()
-GEMINI_API_KEY = "AIzaSyBiKqIS4xlwQHMlsv7MLzeRoYl_5ppalSU"
+# Multi-tenant QR Login states
+qr_login_states = {}   # username -> state dict
+qr_threads = {}        # username -> Thread
+qr_api_instances = {}  # username -> ZaloAPI instance
 
-# Telegram configuration (optional)
-TELEGRAM_BOT_TOKEN = None  
-TELEGRAM_CHAT_ID = None    
-ENABLE_TELEGRAM = False    
+def save_login_to_config(username, cookies, imei):
+    user_dir = os.path.join(ROOT_DIR, 'users', username)
+    os.makedirs(user_dir, exist_ok=True)
+    session_path = os.path.join(user_dir, 'session.json')
+    with open(session_path, 'w', encoding='utf-8') as f:
+        json.dump({"cookies": cookies, "imei": imei}, f, indent=4, ensure_ascii=False)
 
-IMEI = {repr(imei)}
-SESSION_COOKIES = {json.dumps(cookies)}
-"""
-    with open(config_path, 'w', encoding='utf-8') as f:
-        f.write(content)
-
-def qr_login_worker():
-    global qr_login_state, qr_api_instance
+def qr_login_worker(username):
+    global qr_login_states, qr_api_instances
     tmp_qr_path = None
     try:
-        qr_login_state["status"] = "generating"
-        qr_login_state["error_message"] = ""
-        qr_login_state["user_info"] = None
-        qr_login_state["qr_base64"] = ""
-
-        # Use temp file for QR (works reliably on Render and any OS)
+        qr_login_states[username] = {
+            "status": "generating",
+            "qr_base64": "",
+            "error_message": "",
+            "user_info": None
+        }
+        
+        user_dir = os.path.join(ROOT_DIR, 'users', username)
+        os.makedirs(user_dir, exist_ok=True)
+        
+        # Use temp file for QR
         tmp_fd, tmp_qr_path = tempfile.mkstemp(suffix='.png')
         os.close(tmp_fd)
 
         # Initialize ZaloAPI with no credentials
-        qr_api_instance = ZaloAPI("", "", "", auto_login=False)
+        api_instance = ZaloAPI("", "", "", auto_login=False)
+        qr_api_instances[username] = api_instance
 
         def on_qr_gen(path):
             try:
                 with open(path, 'rb') as f:
                     img_data = f.read()
-                qr_login_state["qr_base64"] = base64.b64encode(img_data).decode('utf-8')
-            except Exception as e:
+                qr_login_states[username]["qr_base64"] = base64.b64encode(img_data).decode('utf-8')
+            except Exception:
                 pass
-            qr_login_state["status"] = "generated"
+            qr_login_states[username]["status"] = "generated"
 
-        # Start QR login flow (blocking wait for scan and confirm)
-        result = qr_api_instance.loginWithQR(
+        # Start QR login flow
+        result = api_instance.loginWithQR(
             qr_path=tmp_qr_path,
             on_qr_generated=on_qr_gen
         )
 
         if result and result.get("status") == "success":
-            cookies = qr_api_instance._state.get_cookies()
-            imei = qr_api_instance._state.user_imei or qr_api_instance._imei
+            cookies = api_instance._state.get_cookies()
+            imei = api_instance._state.user_imei or api_instance._imei
             
             # Save session to config.py
-            save_login_to_config(cookies, imei)
+            save_login_to_config(username, cookies, imei)
             
-            qr_login_state["status"] = "success"
-            qr_login_state["user_info"] = result.get("userInfo")
+            qr_login_states[username]["status"] = "success"
+            qr_login_states[username]["user_info"] = result.get("userInfo")
         else:
-            qr_login_state["status"] = "failed"
-            qr_login_state["error_message"] = "Đăng nhập không thành công."
+            qr_login_states[username]["status"] = "failed"
+            qr_login_states[username]["error_message"] = "Đăng nhập không thành công."
             
     except Exception as e:
-        qr_login_state["status"] = "failed"
-        qr_login_state["error_message"] = str(e)
+        qr_login_states[username] = {
+            "status": "failed",
+            "qr_base64": "",
+            "error_message": str(e),
+            "user_info": None
+        }
     finally:
         if tmp_qr_path and os.path.exists(tmp_qr_path):
             try:
@@ -135,35 +128,109 @@ def qr_login_worker():
             except Exception:
                 pass
 
+@app.before_request
+def require_login():
+    # Authenticate API requests, except auth routes and static assets
+    if request.path.startswith('/api/') and not request.path.startswith('/api/auth/'):
+        if 'username' not in session:
+            return jsonify({"status": "error", "message": "Vui lòng đăng nhập để thực hiện chức năng này!"}), 401
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
+# ============================
+# AUTHENTICATION API ROUTES
+# ============================
+@app.route('/api/auth/register', methods=['POST'])
+def auth_register():
+    data = request.json or {}
+    username = data.get('username', '').strip().lower()
+    password = data.get('password', '').strip()
+    
+    if not username or not password:
+        return jsonify({"status": "error", "message": "Tên đăng nhập và mật khẩu không được để trống!"})
+        
+    if len(username) < 3 or len(password) < 6:
+        return jsonify({"status": "error", "message": "Tên đăng nhập tối thiểu 3 ký tự, mật khẩu tối thiểu 6 ký tự!"})
+        
+    users = load_users()
+    if username in users:
+        return jsonify({"status": "error", "message": "Tên đăng nhập đã tồn tại!"})
+        
+    users[username] = {
+        "password": hash_password(password),
+        "created_at": time.time()
+    }
+    save_users(users)
+    return jsonify({"status": "success", "message": "Đăng ký tài khoản thành công!"})
+
+@app.route('/api/auth/login', methods=['POST'])
+def auth_login():
+    data = request.json or {}
+    username = data.get('username', '').strip().lower()
+    password = data.get('password', '').strip()
+    
+    if not username or not password:
+        return jsonify({"status": "error", "message": "Vui lòng nhập đủ tên đăng nhập và mật khẩu!"})
+        
+    users = load_users()
+    if username not in users or users[username]["password"] != hash_password(password):
+        return jsonify({"status": "error", "message": "Tài khoản hoặc mật khẩu không chính xác!"})
+        
+    session['username'] = username
+    return jsonify({"status": "success", "message": "Đăng nhập thành công!", "username": username})
+
+@app.route('/api/auth/logout', methods=['POST'])
+def auth_logout():
+    session.clear()
+    return jsonify({"status": "success", "message": "Đã đăng xuất!"})
+
+@app.route('/api/auth/session', methods=['GET'])
+def auth_session():
+    if 'username' in session:
+        return jsonify({"logged_in": True, "username": session['username']})
+    return jsonify({"logged_in": False})
+
+# ============================
+# MULTI-TENANT ZALO QR LOGIN
+# ============================
 @app.route('/api/qr/generate', methods=['POST'])
 def generate_qr():
-    global qr_thread, qr_login_state
-    if qr_login_state["status"] in ["generating", "generated"]:
-        return jsonify({"status": qr_login_state["status"], "image_path": qr_login_state["image_path"]})
+    global qr_threads, qr_login_states
+    username = session['username']
+    
+    state = qr_login_states.get(username, {})
+    if state.get("status") in ["generating", "generated"]:
+        return jsonify({"status": state["status"], "image_path": ""})
         
-    qr_login_state["status"] = "generating"
-    qr_thread = threading.Thread(target=qr_login_worker, daemon=True)
-    qr_thread.start()
+    qr_login_states[username] = {"status": "generating"}
+    t = threading.Thread(target=qr_login_worker, args=(username,), daemon=True)
+    qr_threads[username] = t
+    t.start()
     return jsonify({"status": "generating"})
 
 @app.route('/api/qr/status', methods=['GET'])
 def get_qr_status():
-    return jsonify(qr_login_state)
+    username = session['username']
+    state = qr_login_states.get(username, {"status": "idle"})
+    return jsonify(state)
 
+# ============================
+# BOT CONTROL API
+# ============================
 @app.route('/api/config', methods=['GET', 'POST'])
 def handle_config():
-    setting_path = os.path.join(ROOT_DIR, 'seting.json')
+    username = session['username']
+    user_dir = os.path.join(ROOT_DIR, 'users', username)
+    setting_path = os.path.join(user_dir, 'seting.json')
+    
     if request.method == 'POST':
         data = request.json
         bot_name = data.get('bot_name', 'Zalo Bot')
         admin_id = data.get('admin_id', '')
         prefix = data.get('prefix', '?')
         
-        # Save to file
         settings = {}
         if os.path.exists(setting_path):
             try:
@@ -176,6 +243,7 @@ def handle_config():
         settings['admin'] = admin_id
         settings['prefix'] = prefix
         
+        os.makedirs(user_dir, exist_ok=True)
         with open(setting_path, 'w', encoding='utf-8') as f:
             json.dump(settings, f, indent=4, ensure_ascii=False)
             
@@ -196,45 +264,51 @@ def handle_config():
 
 @app.route('/api/bot/start', methods=['POST'])
 def start_bot():
+    username = session['username']
     data = request.json
     bot_name = data.get('bot_name', 'Zalo Bot')
     admin_id = data.get('admin_id', '')
     prefix = data.get('prefix', '?')
     
-    success, message = bot_runner.start(bot_name, admin_id, prefix)
+    success, message = bot_runner.start(username, bot_name, admin_id, prefix)
     return jsonify({"status": "success" if success else "error", "message": message})
 
 @app.route('/api/bot/stop', methods=['POST'])
 def stop_bot():
-    success, message = bot_runner.stop()
+    username = session['username']
+    success, message = bot_runner.stop(username)
     return jsonify({"status": "success" if success else "error", "message": message})
 
 @app.route('/api/bot/status', methods=['GET'])
 def get_bot_status():
+    username = session['username']
     return jsonify({
-        "running": bot_runner.is_running()
+        "running": bot_runner.is_running(username)
     })
 
 @app.route('/api/bot/logs', methods=['GET'])
 def get_bot_logs():
+    username = session['username']
     return jsonify({
-        "logs": bot_runner.get_logs()
+        "logs": bot_runner.get_logs(username)
     })
 
+# ============================
+# PIP LIBRARIES MANAGER API
+# ============================
 @app.route('/api/pip/install', methods=['POST'])
 def pip_install():
-    """Install a specific Python package by name."""
+    username = session['username']
     data = request.json or {}
     package = data.get('package', '').strip()
     if not package:
         return jsonify({"status": "error", "message": "Tên thư viện không được để trống!"})
     
-    # Basic safety check - no shell injection
     if any(c in package for c in [';', '&', '|', '`', '$', '>', '<', '\n', '\r']):
         return jsonify({"status": "error", "message": "Tên thư viện không hợp lệ!"})
     
     def run_install():
-        bot_runner.log_message(f"[PIP] Đang cài đặt: {package}...\n")
+        bot_runner.log_message(username, f"[PIP] Đang cài đặt: {package}...\n")
         try:
             proc = subprocess.Popen(
                 [sys.executable, '-m', 'pip', 'install', package, '--no-cache-dir'],
@@ -245,27 +319,27 @@ def pip_install():
                 errors='replace'
             )
             for line in proc.stdout:
-                bot_runner.log_message(line)
+                bot_runner.log_message(username, line)
             proc.wait()
             if proc.returncode == 0:
-                bot_runner.log_message(f"[PIP] ✅ Đã cài đặt thành công: {package}\n")
+                bot_runner.log_message(username, f"[PIP] ✅ Đã cài đặt thành công: {package}\n")
             else:
-                bot_runner.log_message(f"[PIP] ❌ Cài đặt thất bại: {package} (exit code {proc.returncode})\n")
+                bot_runner.log_message(username, f"[PIP] ❌ Cài đặt thất bại: {package} (exit code {proc.returncode})\n")
         except Exception as e:
-            bot_runner.log_message(f"[PIP ERROR] {e}\n")
+            bot_runner.log_message(username, f"[PIP ERROR] {e}\n")
     
     threading.Thread(target=run_install, daemon=True).start()
     return jsonify({"status": "success", "message": f"Đang cài đặt {package}..."})
 
 @app.route('/api/pip/install-all', methods=['POST'])
 def pip_install_all():
-    """Install all packages from requirements.txt."""
+    username = session['username']
     req_path = os.path.join(ROOT_DIR, 'requirements.txt')
     if not os.path.exists(req_path):
         return jsonify({"status": "error", "message": "Không tìm thấy requirements.txt!"})
     
     def run_install_all():
-        bot_runner.log_message("[PIP] 🔄 Bắt đầu cài đặt tất cả thư viện từ requirements.txt...\n")
+        bot_runner.log_message(username, "[PIP] 🔄 Bắt đầu cài đặt tất cả thư viện từ requirements.txt...\n")
         try:
             proc = subprocess.Popen(
                 [sys.executable, '-m', 'pip', 'install', '-r', req_path, '--no-cache-dir'],
@@ -276,14 +350,14 @@ def pip_install_all():
                 errors='replace'
             )
             for line in proc.stdout:
-                bot_runner.log_message(line)
+                bot_runner.log_message(username, line)
             proc.wait()
             if proc.returncode == 0:
-                bot_runner.log_message("[PIP] ✅ Đã cài đặt thành công tất cả thư viện!\n")
+                bot_runner.log_message(username, "[PIP] ✅ Đã cài đặt thành công tất cả thư viện!\n")
             else:
-                bot_runner.log_message(f"[PIP] ❌ Có lỗi khi cài đặt thư viện (exit code {proc.returncode})\n")
+                bot_runner.log_message(username, f"[PIP] ❌ Có lỗi khi cài đặt thư viện (exit code {proc.returncode})\n")
         except Exception as e:
-            bot_runner.log_message(f"[PIP ERROR] {e}\n")
+            bot_runner.log_message(username, f"[PIP ERROR] {e}\n")
     
     threading.Thread(target=run_install_all, daemon=True).start()
     return jsonify({"status": "success", "message": "Đang cài đặt tất cả thư viện..."})
@@ -292,24 +366,29 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5050))
     print(f"Khoi dong Web Manager tai http://localhost:{port}")
     
-    # Auto-start bot on startup if configuration exists
+    # Auto-start previously running bots for registered users on startup
     try:
-        setting_path = os.path.join(ROOT_DIR, 'seting.json')
-        config_path = os.path.join(ROOT_DIR, 'config.py')
-        if os.path.exists(setting_path) and os.path.exists(config_path):
-            with open(setting_path, 'r', encoding='utf-8') as f:
-                settings = json.load(f)
-            bot_name = settings.get('name_bot')
-            admin_id = settings.get('admin')
-            prefix = settings.get('prefix', '?')
+        users_file = os.path.join(ROOT_DIR, 'database', 'users.json')
+        if os.path.exists(users_file):
+            with open(users_file, 'r', encoding='utf-8') as f:
+                users_list = json.load(f)
             
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config_content = f.read()
+            for user in users_list.keys():
+                user_dir = os.path.join(ROOT_DIR, 'users', user)
+                setting_path = os.path.join(user_dir, 'seting.json')
+                session_path = os.path.join(user_dir, 'session.json')
                 
-            if bot_name and admin_id and "SESSION_COOKIES" in config_content and "SESSION_COOKIES = {}" not in config_content:
-                bot_runner.log_message("[SYSTEM] Phát hiện cấu hình cũ. Tự động khởi động bot...\n")
-                bot_runner.start(bot_name, admin_id, prefix)
+                if os.path.exists(setting_path) and os.path.exists(session_path):
+                    with open(setting_path, 'r', encoding='utf-8') as f:
+                        settings = json.load(f)
+                    bot_name = settings.get('name_bot')
+                    admin_id = settings.get('admin')
+                    prefix = settings.get('prefix', '?')
+                    
+                    if bot_name and admin_id:
+                        print(f"[SYSTEM] Tu dong khoi dong bot cho user: {user}")
+                        bot_runner.start(user, bot_name, admin_id, prefix)
     except Exception as e:
-        print(f"Lỗi khởi động bot tự động: {e}")
+        print(f"Loi khoi dong bot tu dong luc startup: {e}")
 
     app.run(host='0.0.0.0', port=port, debug=False)

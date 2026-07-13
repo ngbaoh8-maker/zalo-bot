@@ -14,34 +14,81 @@
 <body>
     <div class="glow-bg"></div>
     
+    <!-- Authentication Overlay -->
+    <div class="auth-overlay" id="auth-overlay">
+        <div class="auth-card glass-card">
+            <div class="auth-header">
+                <div class="auth-logo"><i class="fa-solid fa-robot"></i></div>
+                <h2 id="auth-title">Đăng Nhập ZaloBot</h2>
+                <p id="auth-subtitle">Quản lý phiên Zalo Bot riêng tư của bạn</p>
+            </div>
+            
+            <form class="auth-form" id="auth-form">
+                <div class="form-group">
+                    <label for="auth-username"><i class="fa-solid fa-user"></i> Tên đăng nhập</label>
+                    <input type="text" id="auth-username" required minlength="3" placeholder="Tên đăng nhập (tối thiểu 3 ký tự)..." autocomplete="username">
+                </div>
+                <div class="form-group" style="margin-top: 1rem;">
+                    <label for="auth-password"><i class="fa-solid fa-lock"></i> Mật khẩu</label>
+                    <input type="password" id="auth-password" required minlength="6" placeholder="Mật khẩu (tối thiểu 6 ký tự)..." autocomplete="current-password">
+                </div>
+                <div class="auth-actions" style="margin-top: 1.5rem;">
+                    <button type="submit" class="btn btn-primary" id="btn-auth-submit" style="width: 100%;">Đăng Nhập</button>
+                </div>
+            </form>
+            
+            <div class="auth-toggle">
+                <span id="auth-toggle-text">Chưa có tài khoản?</span>
+                <a href="#" id="auth-toggle-link">Đăng ký ngay</a>
+            </div>
+            
+            <div class="auth-error-msg hidden" id="auth-error-msg"></div>
+        </div>
+    </div>
+
     <!-- Mobile Sidebar Overlay -->
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
     
-    <div class="app-container">
+    <div class="app-container hidden" id="main-app-container">
         <!-- Sidebar / Brand -->
         <aside class="sidebar" id="sidebar">
-            <div>
-                <div class="brand">
-                    <div class="brand-logo">
-                        <i class="fa-solid fa-robot"></i>
+            <div style="display: flex; flex-direction: column; height: 100%; justify-content: space-between; flex-grow: 1;">
+                <div>
+                    <div class="brand">
+                        <div class="brand-logo">
+                            <i class="fa-solid fa-robot"></i>
+                        </div>
+                        <div class="brand-name">
+                            <h2>ZaloBot</h2>
+                            <span>v2.0 SaaS</span>
+                        </div>
                     </div>
-                    <div class="brand-name">
-                        <h2>ZaloBot</h2>
-                        <span>v2.0 Dashboard</span>
-                    </div>
+                    
+                    <nav class="side-nav">
+                        <a href="#" class="nav-item active"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
+                        <a href="https://zalo.me/g/ur58vacl0hhscxjwfzsj" target="_blank" class="nav-item"><i class="fa-solid fa-users"></i> Nhóm Hỗ Trợ</a>
+                    </nav>
                 </div>
                 
-                <nav class="side-nav">
-                    <a href="#" class="nav-item active"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
-                    <a href="https://zalo.me/g/ur58vacl0hhscxjwfzsj" target="_blank" class="nav-item"><i class="fa-solid fa-users"></i> Nhóm Hỗ Trợ</a>
-                </nav>
-            </div>
-            
-            <div class="bot-status-card">
-                <div class="status-indicator" id="sidebar-status-indicator"></div>
-                <div class="status-info">
-                    <span class="status-label">Trạng thái Bot</span>
-                    <span class="status-value" id="sidebar-status-text">Đang Dừng</span>
+                <div>
+                    <div class="bot-status-card" style="margin-bottom: 1rem;">
+                        <div class="status-indicator" id="sidebar-status-indicator"></div>
+                        <div class="status-info">
+                            <span class="status-label">Trạng thái Bot</span>
+                            <span class="status-value" id="sidebar-status-text">Đang Dừng</span>
+                        </div>
+                    </div>
+
+                    <!-- User Info / Logout -->
+                    <div class="user-profile" id="user-profile-section" style="border-top: 1px solid var(--border-color); padding-top: 1rem; display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 0;">
+                            <i class="fa-solid fa-circle-user" style="font-size: 1.5rem; color: var(--primary-color);"></i>
+                            <span id="user-display-name" style="font-weight: 600; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary);">User</span>
+                        </div>
+                        <button id="btn-logout" title="Đăng xuất" style="background: none; border: none; color: var(--danger-color); cursor: pointer; font-size: 1.1rem; padding: 5px;">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         </aside>
@@ -56,7 +103,7 @@
                     </button>
                     <div class="page-title">
                         <h1>Bảng Điều Khiển</h1>
-                        <p>Đăng nhập, cấu hình và quản lý bot Zalo</p>
+                        <p>Đăng nhập, cấu hình và quản lý bot Zalo của bạn</p>
                     </div>
                 </div>
                 <div class="system-stats">
@@ -68,7 +115,7 @@
             </header>
             
             <div class="dashboard-grid">
-                <!-- QR Login Card -->
+                <!-- QR Login Zalo -->
                 <section class="glass-card qr-card">
                     <div class="card-header">
                         <div class="card-icon"><i class="fa-solid fa-qrcode"></i></div>
