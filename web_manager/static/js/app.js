@@ -405,6 +405,8 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
             console.error('Error fetching logs:', err);
         }
+    }
+
     // ============================
     // AUTHENTICATION LOGIC
     // ============================
