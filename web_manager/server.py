@@ -192,6 +192,82 @@ def auth_session():
         return jsonify({"logged_in": True, "username": session['username']})
     return jsonify({"logged_in": False})
 
+@app.route('/api/auth/config', methods=['GET'])
+def auth_config():
+    """Return public configuration for frontend auth setup."""
+    return jsonify({
+        "google_client_id": os.environ.get('GOOGLE_CLIENT_ID', '')
+    })
+
+@app.route('/api/auth/google', methods=['POST'])
+def auth_google():
+    """Verify Google ID token and auto-login/register user."""
+    data = request.json or {}
+    credential = data.get('credential', '').strip()
+    
+    if not credential:
+        return jsonify({"status": "error", "message": "Token Google không hợp lệ!"})
+    
+    GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
+    if not GOOGLE_CLIENT_ID:
+        return jsonify({"status": "error", "message": "GOOGLE_CLIENT_ID chưa được thiết lập trên server!"})
+    
+    try:
+        from google.oauth2 import id_token
+        from google.auth.transport import requests as google_requests
+        
+        idinfo = id_token.verify_oauth2_token(
+            credential,
+            google_requests.Request(),
+            GOOGLE_CLIENT_ID,
+            clock_skew_in_seconds=10
+        )
+        
+        google_id = idinfo['sub']
+        email = idinfo.get('email', '')
+        name = idinfo.get('name', email)
+        
+        if not email:
+            return jsonify({"status": "error", "message": "Không lấy được email từ tài khoản Google!"})
+        
+        # Derive a safe username from email: gg_firstname_lastname
+        base_username = 'gg_' + email.split('@')[0].lower().replace('.', '_').replace('+', '_')
+        
+        users = load_users()
+        
+        # Check if this Google account already registered (by google_id)
+        username = None
+        for uname, udata in users.items():
+            if isinstance(udata, dict) and udata.get('google_id') == google_id:
+                username = uname
+                break
+        
+        if not username:
+            # First-time Google login - auto-register
+            username = base_username
+            # Ensure username is unique
+            counter = 1
+            while username in users:
+                username = base_username + str(counter)
+                counter += 1
+            
+            users[username] = {
+                "password": None,
+                "google_id": google_id,
+                "email": email,
+                "name": name,
+                "created_at": time.time()
+            }
+            save_users(users)
+        
+        session['username'] = username
+        return jsonify({"status": "success", "message": f"Đăng nhập Google thành công!", "username": username})
+    
+    except ValueError as e:
+        return jsonify({"status": "error", "message": f"Token Google không hợp lệ: {str(e)}"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Đăng nhập Google thất bại: {str(e)}"})
+
 # ============================
 # MULTI-TENANT ZALO QR LOGIN
 # ============================

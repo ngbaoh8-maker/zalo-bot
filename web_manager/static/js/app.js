@@ -99,6 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // INITIALIZE
     // ============================
     checkSession();
+    initGoogleSignIn();
 
     // Event Listeners
     btnGenerateQr.addEventListener('click', generateQR);
@@ -407,6 +408,70 @@ document.addEventListener('DOMContentLoaded', () => {
     // ============================
     // AUTHENTICATION LOGIC
     // ============================
+
+    // Google Sign-In handler (called by Google GSI)
+    window.handleGoogleSignIn = async function(response) {
+        const credential = response.credential;
+        try {
+            const res = await fetch('/api/auth/google', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ credential })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                checkSession();
+            } else {
+                showAuthError(data.message);
+            }
+        } catch (err) {
+            showAuthError('Lỗi kết nối Google: ' + err.message);
+        }
+    };
+
+    async function initGoogleSignIn() {
+        try {
+            const res = await fetch('/api/auth/config');
+            const config = await res.json();
+            const clientId = config.google_client_id;
+            
+            if (!clientId) return; // Google login not configured - hide button
+            
+            // Show Google button and divider
+            document.getElementById('google-signin-container').classList.remove('hidden');
+            document.getElementById('auth-divider').classList.remove('hidden');
+            document.getElementById('auth-divider').style.display = 'flex';
+            
+            // Dynamically load Google Identity Services script
+            const script = document.createElement('script');
+            script.src = 'https://accounts.google.com/gsi/client';
+            script.async = true;
+            script.defer = true;
+            script.onload = () => {
+                google.accounts.id.initialize({
+                    client_id: clientId,
+                    callback: window.handleGoogleSignIn,
+                    auto_select: false,
+                    cancel_on_tap_outside: true,
+                });
+                google.accounts.id.renderButton(
+                    document.getElementById('google-signin-btn'),
+                    {
+                        theme: 'filled_blue',
+                        size: 'large',
+                        shape: 'rectangular',
+                        text: 'signin_with',
+                        width: 300,
+                        logo_alignment: 'left',
+                    }
+                );
+            };
+            document.head.appendChild(script);
+        } catch (err) {
+            console.error('Google Sign-In init error:', err);
+        }
+    }
+
     async function checkSession() {
         try {
             const res = await fetch('/api/auth/session');

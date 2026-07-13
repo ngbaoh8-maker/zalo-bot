@@ -23,6 +23,18 @@
                 <p id="auth-subtitle">Quản lý phiên Zalo Bot riêng tư của bạn</p>
             </div>
             
+            <!-- Google Sign-In Button -->
+            <div id="google-signin-container" class="hidden" style="margin-bottom: 1rem;">
+                <div id="google-signin-btn" style="display: flex; justify-content: center; min-height: 44px;"></div>
+            </div>
+            
+            <!-- Divider -->
+            <div id="auth-divider" class="hidden" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                <div style="flex: 1; height: 1px; background: var(--border-color);"></div>
+                <span style="font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap;">hoặc</span>
+                <div style="flex: 1; height: 1px; background: var(--border-color);"></div>
+            </div>
+            
             <form class="auth-form" id="auth-form">
                 <div class="form-group">
                     <label for="auth-username"><i class="fa-solid fa-user"></i> Tên đăng nhập</label>
