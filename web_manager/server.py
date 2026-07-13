@@ -2,6 +2,7 @@ import os
 import sys
 import base64
 import tempfile
+import subprocess
 
 # Configure UTF-8 encoding for standard streams
 try:
