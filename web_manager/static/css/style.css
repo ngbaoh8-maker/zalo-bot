@@ -408,7 +408,7 @@ body {
 
 .btn-group {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 0.875rem;
     margin-top: 0.875rem;
 }
@@ -436,6 +436,19 @@ body {
 .btn-stop:hover:not(:disabled) {
     background: linear-gradient(135deg, #f85149, #ff6b6b);
     box-shadow: 0 4px 20px var(--danger-glow);
+    transform: translateY(-1px);
+}
+
+.btn-restart {
+    background: linear-gradient(135deg, #d29922, #e3b341);
+    color: white;
+    font-size: 0.85rem;
+    padding: 0.875rem;
+}
+
+.btn-restart:hover:not(:disabled) {
+    background: linear-gradient(135deg, #e3b341, #f1c24e);
+    box-shadow: 0 4px 20px rgba(210, 153, 34, 0.35);
     transform: translateY(-1px);
 }
 
@@ -613,11 +626,11 @@ body {
     }
 
     .btn-group {
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1fr 1fr 1fr;
         gap: 0.75rem;
     }
 
-    .btn-start, .btn-stop {
+    .btn-start, .btn-stop, .btn-restart {
         padding: 1rem;
         font-size: 0.88rem;
     }

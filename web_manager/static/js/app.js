@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const btnStartBot = document.getElementById('btn-start-bot');
     const btnStopBot = document.getElementById('btn-stop-bot');
+    const btnRestartBot = document.getElementById('btn-restart-bot');
     
     const sidebarStatusIndicator = document.getElementById('sidebar-status-indicator');
     const sidebarStatusText = document.getElementById('sidebar-status-text');
@@ -106,6 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
     configForm.addEventListener('submit', saveConfig);
     btnStartBot.addEventListener('click', startBot);
     btnStopBot.addEventListener('click', stopBot);
+    btnRestartBot.addEventListener('click', restartBot);
     
     btnClearConsole.addEventListener('click', () => {
         terminalBody.innerHTML = '';
@@ -155,6 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
         botRunning = running;
         btnStartBot.disabled = running;
         btnStopBot.disabled = !running;
+        btnRestartBot.disabled = !running;
         
         const indicators = [sidebarStatusIndicator, mobileStatusIndicator];
         const texts = [sidebarStatusText, mobileStatusText];
@@ -317,6 +320,31 @@ document.addEventListener('DOMContentLoaded', () => {
     async function stopBot() {
         try {
             const res = await fetch('/api/bot/stop', { method: 'POST' });
+            const data = await res.json();
+            if (data.status === 'success') {
+                appendTerminalLine(`[SYSTEM] ${data.message}`, 'success');
+                checkBotStatus();
+            } else {
+                appendTerminalLine(`[SYSTEM ERROR] ${data.message}`, 'error');
+            }
+        } catch (err) {
+            appendTerminalLine(`[SYSTEM ERROR] Kết nối thất bại: ${err.message}`, 'error');
+        }
+    }
+
+    async function restartBot() {
+        const configData = {
+            bot_name: botNameInput.value,
+            admin_id: adminIdInput.value,
+            prefix: botPrefixInput.value
+        };
+        appendTerminalLine(`[SYSTEM] 🔄 Đang yêu cầu khởi động lại bot...`, 'system');
+        try {
+            const res = await fetch('/api/bot/restart', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(configData)
+            });
             const data = await res.json();
             if (data.status === 'success') {
                 appendTerminalLine(`[SYSTEM] ${data.message}`, 'success');

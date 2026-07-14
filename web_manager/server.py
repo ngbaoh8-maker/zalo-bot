@@ -16,6 +16,7 @@ import json
 import shutil
 import threading
 import time
+from datetime import timedelta
 
 # Add parent directory to python path for importing zlapi
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -26,10 +27,91 @@ from bot_runner import BotRunner
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 app.secret_key = os.environ.get('SECRET_KEY', 'zalo_bot_saas_super_secret_key_9988')
+app.permanent_session_lifetime = timedelta(days=365) # 1 year
 
 # Root bot folder is parent of this folder
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 bot_runner = BotRunner(ROOT_DIR)
+
+# Global variables for auto-start and watchdog
+installing_users = set()
+
+def update_bot_status_setting(username, status):
+    user_dir = os.path.join(ROOT_DIR, 'users', username)
+    setting_path = os.path.join(user_dir, 'seting.json')
+    settings = {}
+    if os.path.exists(setting_path):
+        try:
+            with open(setting_path, 'r', encoding='utf-8') as f:
+                settings = json.load(f)
+        except Exception:
+            pass
+    settings['status'] = status
+    os.makedirs(user_dir, exist_ok=True)
+    with open(setting_path, 'w', encoding='utf-8') as f:
+        json.dump(settings, f, indent=4, ensure_ascii=False)
+
+def auto_start_if_needed(username):
+    user_dir = os.path.join(ROOT_DIR, 'users', username)
+    setting_path = os.path.join(user_dir, 'seting.json')
+    session_path = os.path.join(user_dir, 'session.json')
+    
+    if os.path.exists(setting_path) and os.path.exists(session_path):
+        try:
+            with open(setting_path, 'r', encoding='utf-8') as f:
+                settings = json.load(f)
+        except Exception:
+            return
+            
+        if settings.get('status') == 'running' and not bot_runner.is_running(username):
+            bot_name = settings.get('name_bot')
+            admin_id = settings.get('admin')
+            prefix = settings.get('prefix', '?')
+            if bot_name and admin_id:
+                bot_runner.log_message(username, "[SYSTEM] 🚀 Thư viện đã cài xong. Tự động khởi chạy lại bot...\n")
+                bot_runner.start(username, bot_name, admin_id, prefix)
+
+def bot_watchdog_worker():
+    while True:
+        try:
+            time.sleep(15)
+            # Load users dynamically
+            users_file = os.path.join(ROOT_DIR, 'database', 'users.json')
+            if not os.path.exists(users_file):
+                continue
+            with open(users_file, 'r', encoding='utf-8') as f:
+                users_list = json.load(f)
+            
+            for user in users_list.keys():
+                if user in installing_users:
+                    continue # Skip if installing pip packages
+                
+                user_dir = os.path.join(ROOT_DIR, 'users', user)
+                setting_path = os.path.join(user_dir, 'seting.json')
+                session_path = os.path.join(user_dir, 'session.json')
+                
+                if os.path.exists(setting_path) and os.path.exists(session_path):
+                    try:
+                        with open(setting_path, 'r', encoding='utf-8') as f:
+                            settings = json.load(f)
+                    except Exception:
+                        continue
+                        
+                    if settings.get('status') == 'running':
+                        if not bot_runner.is_running(user):
+                            bot_name = settings.get('name_bot')
+                            admin_id = settings.get('admin')
+                            prefix = settings.get('prefix', '?')
+                            if bot_name and admin_id:
+                                print(f"[WATCHDOG] Bot cho user '{user}' đang offline. Tu dong khoi chay lai...")
+                                bot_runner.log_message(user, "[SYSTEM] 🔄 Phát hiện bot bị dừng đột ngột. Tự động khởi động lại bot...\n")
+                                bot_runner.start(user, bot_name, admin_id, prefix)
+        except Exception as e:
+            print(f"[WATCHDOG ERROR] {e}")
+
+# Start the watchdog thread immediately
+threading.Thread(target=bot_watchdog_worker, daemon=True).start()
+
 
 # User Database Helper Functions
 DB_DIR = os.path.join(ROOT_DIR, 'database')
@@ -178,6 +260,7 @@ def auth_login():
     if username not in users or users[username]["password"] != hash_password(password):
         return jsonify({"status": "error", "message": "Tài khoản hoặc mật khẩu không chính xác!"})
         
+    session.permanent = True
     session['username'] = username
     return jsonify({"status": "success", "message": "Đăng nhập thành công!", "username": username})
 
@@ -260,6 +343,7 @@ def auth_google():
             }
             save_users(users)
         
+        session.permanent = True
         session['username'] = username
         return jsonify({"status": "success", "message": f"Đăng nhập Google thành công!", "username": username})
     
@@ -347,13 +431,34 @@ def start_bot():
     prefix = data.get('prefix', '?')
     
     success, message = bot_runner.start(username, bot_name, admin_id, prefix)
+    if success:
+        update_bot_status_setting(username, 'running')
     return jsonify({"status": "success" if success else "error", "message": message})
 
 @app.route('/api/bot/stop', methods=['POST'])
 def stop_bot():
     username = session['username']
     success, message = bot_runner.stop(username)
+    if success:
+        update_bot_status_setting(username, 'stopped')
     return jsonify({"status": "success" if success else "error", "message": message})
+
+@app.route('/api/bot/restart', methods=['POST'])
+def restart_bot():
+    username = session['username']
+    data = request.json or {}
+    bot_name = data.get('bot_name', 'Zalo Bot')
+    admin_id = data.get('admin_id', '')
+    prefix = data.get('prefix', '?')
+    
+    if bot_runner.is_running(username):
+        bot_runner.stop(username)
+        time.sleep(1.5) # Wait for it to shut down properly
+        
+    success, message = bot_runner.start(username, bot_name, admin_id, prefix)
+    if success:
+        update_bot_status_setting(username, 'running')
+    return jsonify({"status": "success" if success else "error", "message": "Khởi động lại bot thành công!" if success else message})
 
 @app.route('/api/bot/status', methods=['GET'])
 def get_bot_status():
@@ -384,6 +489,7 @@ def pip_install():
         return jsonify({"status": "error", "message": "Tên thư viện không hợp lệ!"})
     
     def run_install():
+        installing_users.add(username)
         bot_runner.log_message(username, f"[PIP] Đang cài đặt: {package}...\n")
         try:
             proc = subprocess.Popen(
@@ -399,10 +505,13 @@ def pip_install():
             proc.wait()
             if proc.returncode == 0:
                 bot_runner.log_message(username, f"[PIP] ✅ Đã cài đặt thành công: {package}\n")
+                auto_start_if_needed(username)
             else:
                 bot_runner.log_message(username, f"[PIP] ❌ Cài đặt thất bại: {package} (exit code {proc.returncode})\n")
         except Exception as e:
             bot_runner.log_message(username, f"[PIP ERROR] {e}\n")
+        finally:
+            installing_users.discard(username)
     
     threading.Thread(target=run_install, daemon=True).start()
     return jsonify({"status": "success", "message": f"Đang cài đặt {package}..."})
@@ -415,6 +524,7 @@ def pip_install_all():
         return jsonify({"status": "error", "message": "Không tìm thấy requirements.txt!"})
     
     def run_install_all():
+        installing_users.add(username)
         bot_runner.log_message(username, "[PIP] 🔄 Bắt đầu cài đặt tất cả thư viện từ requirements.txt...\n")
         try:
             proc = subprocess.Popen(
@@ -430,10 +540,13 @@ def pip_install_all():
             proc.wait()
             if proc.returncode == 0:
                 bot_runner.log_message(username, "[PIP] ✅ Đã cài đặt thành công tất cả thư viện!\n")
+                auto_start_if_needed(username)
             else:
                 bot_runner.log_message(username, f"[PIP] ❌ Có lỗi khi cài đặt thư viện (exit code {proc.returncode})\n")
         except Exception as e:
             bot_runner.log_message(username, f"[PIP ERROR] {e}\n")
+        finally:
+            installing_users.discard(username)
     
     threading.Thread(target=run_install_all, daemon=True).start()
     return jsonify({"status": "success", "message": "Đang cài đặt tất cả thư viện..."})
@@ -461,9 +574,10 @@ if __name__ == '__main__':
                     admin_id = settings.get('admin')
                     prefix = settings.get('prefix', '?')
                     
-                    if bot_name and admin_id:
+                    if bot_name and admin_id and settings.get('status') != 'stopped':
                         print(f"[SYSTEM] Tu dong khoi dong bot cho user: {user}")
                         bot_runner.start(user, bot_name, admin_id, prefix)
+                        update_bot_status_setting(user, 'running')
     except Exception as e:
         print(f"Loi khoi dong bot tu dong luc startup: {e}")
 
