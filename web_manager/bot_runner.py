@@ -115,7 +115,7 @@ class BotRunner:
                 # Start subprocess inside user dir
                 proc = subprocess.Popen(
                     [python_exe, main_py],
-                    cwd=user_dir,
+                    cwd=self.root_dir,
                     env=sub_env,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
