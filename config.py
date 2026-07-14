@@ -42,12 +42,18 @@ ENABLE_TELEGRAM = False
 def load_session():
     try:
         session_path = os.path.join(USER_DIR, 'session.json')
+        print(f"[DEBUG CONFIG] Loading session for user '{BOT_USER}' from: {session_path}")
         if os.path.exists(session_path):
             with open(session_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            return data.get('imei', ''), data.get('cookies', {})
-    except Exception:
-        pass
+            imei = data.get('imei', '')
+            cookies = data.get('cookies', {})
+            print(f"[DEBUG CONFIG] Found session file. IMEI: {imei[:10]}..., Cookies: {list(cookies.keys()) if cookies else 'None'}")
+            return imei, cookies
+        else:
+            print(f"[DEBUG CONFIG] session.json NOT found at {session_path}")
+    except Exception as e:
+        print(f"[DEBUG CONFIG] Error loading session: {e}")
     return '', {}
 
 IMEI, SESSION_COOKIES = load_session()
