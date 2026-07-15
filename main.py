@@ -1097,9 +1097,10 @@ class Client(ZaloAPI):
         
         super().__init__(api_key, secret_key, imei=imei, session_cookies=session_cookies)
         self.is_main_bot = True
-        self.prefix = PREFIX  # ✅ thêm dòng này để fix lỗi
         self.scl_user_states = {} 
         self.settings = self.load_settings()
+        # ✅ Đọc prefix từ seting.json của user (dynamic), fallback về config.PREFIX
+        self.prefix = self.settings.get("prefix") or PREFIX
         self.ADMIN = str(self.settings.get("admin") or ADMIN)
         self.ADM = [str(uid) for uid in self.settings.get("adm", [])]
         
@@ -1629,7 +1630,13 @@ class Client(ZaloAPI):
 
     def load_settings(self):
         try:
-            with open("seting.json", "r", encoding="utf-8") as f:
+            from config import USER_DIR
+            import os as _os
+            # Đọc từ thư mục user cụ thể (multi-tenant support)
+            user_seting = _os.path.join(USER_DIR, 'seting.json')
+            root_seting = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'seting.json')
+            path = user_seting if _os.path.exists(user_seting) else root_seting
+            with open(path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except FileNotFoundError:
             logger.error("Không tìm thấy file seting.json")
@@ -2028,7 +2035,7 @@ class Client(ZaloAPI):
             # ======== Tin nhắn trả lời ==========
             reply_text = (
 "💮[ Tin Nhắn Tự Động ] 💮\n"
-"🌸Chào Bạn Mình là nguyen hoang gia bao\n"
+"🌸Chào Bạn Mình là Zalo Bot\n"
 "🗣️Hiện Tại Mình Đang Bận Xử Lí Công Việc..\n"
 "🫂Xíu Sẽ Rep Bạn Sau Khi Online Nhé !\n"
 "☺️Vui Lòng Liên Hệ Zalo: 0993637159\n"
@@ -2042,7 +2049,7 @@ class Client(ZaloAPI):
 "━━━━━━━━━━━━━━━━━━━\n"
 "🌺 Chúc Bạn Một Ngày Vui Vẻ Nhé !\n"
 "[ Box Chính Của Mình ]\n"
-"- https://zalo.me/g/ur58vacl0hhscxjwfzsj\n"
+"- https://zalo.me/g/ur58vacl0hhscxjwfzsj"
             )
 
             # ======== Style chia nhiều màu ==========
@@ -2196,6 +2203,19 @@ class Client(ZaloAPI):
             if message_lower == "bot bật":
                 AUTOREPLY_ENABLED = True
                 self.send(Message(text="😹 Bot Quẩy Típ Nà ⚡."), thread_id, thread_type, ttl=66666)
+                return
+
+            # ✅ Lệnh {prefix}tudong on/off để bật/tắt tin nhắn tự động
+            _prefix = getattr(self, 'prefix', PREFIX)
+            if message_lower == f"{_prefix}tudong off":
+                AUTOREPLY_ENABLED = False
+                self.send(Message(text="🔕 Đã TẮT tin nhắn tự động!"), thread_id, thread_type, ttl=66666)
+                return
+
+            if message_lower == f"{_prefix}tudong on":
+                AUTOREPLY_ENABLED = True
+                self.send(Message(text="🔔 Đã BẬT tin nhắn tự động!"), thread_id, thread_type, ttl=66666)
+                return
 
         except Exception as e:
             print(f"[onMessage] Lỗi: {e}")
