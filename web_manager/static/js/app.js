@@ -128,13 +128,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 adminIdInput.value = data.uid;
                 adminIdInput.readOnly = true;
                 adminIdInput.style.opacity = '0.7';
-                adminIdHelp.innerText = `[TỰ ĐỘNG] Đã tự động nhận diện ID từ phiên: ${data.name || 'Zalo Account'} (${data.uid})`;
+                adminIdHelp.innerText = `[TỰ ĐỘNG] Đã tự động nhận diện ID: ${data.name || 'Zalo Account'} (${data.uid})`;
                 adminIdHelp.style.color = 'var(--success-color)';
             } else {
-                alert('Chưa phát hiện phiên đăng nhập QR! Hãy quét mã QR trước hoặc nhập thủ công.');
-                
-                // Revert toggle state back to manual
-                btnAdminManual.click();
+                // Không tìm thấy UID - cho phép nhập thủ công, không show popup
+                adminIdInput.readOnly = false;
+                adminIdInput.style.opacity = '1';
+                adminIdHelp.innerText = '⚠️ Chưa phát hiện UID tự động. Vui lòng nhập ID Zalo thủ công bên dưới.';
+                adminIdHelp.style.color = 'var(--warning-color, #f5a623)';
             }
         } catch (err) {
             console.error('Lỗi khi lấy Zalo UID:', err);

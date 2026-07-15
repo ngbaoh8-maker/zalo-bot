@@ -400,20 +400,35 @@ def get_zalo_profile():
     username = session['username']
     user_dir = os.path.join(ROOT_DIR, 'users', username)
     session_path = os.path.join(user_dir, 'session.json')
+    setting_path = os.path.join(user_dir, 'seting.json')
     
+    uid = None
+    name = None
+
+    # Đọc từ session.json
     if os.path.exists(session_path):
         try:
             with open(session_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            return jsonify({
-                "status": "success",
-                "uid": data.get("uid"),
-                "name": data.get("name")
-            })
+            uid = data.get('uid') or data.get('userId')
+            name = data.get('name')
         except Exception as e:
-            return jsonify({"status": "error", "message": str(e)})
-            
-    return jsonify({"status": "success", "uid": None, "name": None})
+            return jsonify({'status': 'error', 'message': str(e)})
+
+    # Fallback: đọc uid từ seting.json (field 'admin')
+    if not uid and os.path.exists(setting_path):
+        try:
+            with open(setting_path, 'r', encoding='utf-8') as f:
+                seting = json.load(f)
+            uid = seting.get('admin')
+            if not name:
+                name = seting.get('name_bot', 'Zalo Account')
+        except Exception:
+            pass
+
+    if uid:
+        return jsonify({'status': 'success', 'uid': str(uid), 'name': name})
+    return jsonify({'status': 'success', 'uid': None, 'name': None})
 
 # ============================
 # BOT CONTROL API
