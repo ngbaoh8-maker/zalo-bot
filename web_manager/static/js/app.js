@@ -15,6 +15,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnStartBot = document.getElementById('btn-start-bot');
     const btnStopBot = document.getElementById('btn-stop-bot');
     const btnRestartBot = document.getElementById('btn-restart-bot');
+    const btnAdminAuto = document.getElementById('btn-admin-auto');
+    const btnAdminManual = document.getElementById('btn-admin-manual');
+    const adminIdHelp = document.getElementById('admin-id-help');
     
     const sidebarStatusIndicator = document.getElementById('sidebar-status-indicator');
     const sidebarStatusText = document.getElementById('sidebar-status-text');
@@ -108,6 +111,51 @@ document.addEventListener('DOMContentLoaded', () => {
     btnStartBot.addEventListener('click', startBot);
     btnStopBot.addEventListener('click', stopBot);
     btnRestartBot.addEventListener('click', restartBot);
+
+    btnAdminAuto.addEventListener('click', async () => {
+        btnAdminAuto.classList.add('active');
+        btnAdminAuto.style.background = 'rgba(47,129,247,0.15)';
+        btnAdminAuto.style.color = 'var(--primary-color)';
+        
+        btnAdminManual.classList.remove('active');
+        btnAdminManual.style.background = 'rgba(255,255,255,0.05)';
+        btnAdminManual.style.color = 'var(--text-secondary)';
+        
+        try {
+            const res = await fetch('/api/bot/zalo-profile');
+            const data = await res.json();
+            if (data.status === 'success' && data.uid) {
+                adminIdInput.value = data.uid;
+                adminIdInput.readOnly = true;
+                adminIdInput.style.opacity = '0.7';
+                adminIdHelp.innerText = `[TỰ ĐỘNG] Đã tự động nhận diện ID từ phiên: ${data.name || 'Zalo Account'} (${data.uid})`;
+                adminIdHelp.style.color = 'var(--success-color)';
+            } else {
+                alert('Chưa phát hiện phiên đăng nhập QR! Hãy quét mã QR trước hoặc nhập thủ công.');
+                
+                // Revert toggle state back to manual
+                btnAdminManual.click();
+            }
+        } catch (err) {
+            console.error('Lỗi khi lấy Zalo UID:', err);
+            btnAdminManual.click();
+        }
+    });
+
+    btnAdminManual.addEventListener('click', () => {
+        btnAdminManual.classList.add('active');
+        btnAdminManual.style.background = 'rgba(47,129,247,0.15)';
+        btnAdminManual.style.color = 'var(--primary-color)';
+        
+        btnAdminAuto.classList.remove('active');
+        btnAdminAuto.style.background = 'rgba(255,255,255,0.05)';
+        btnAdminAuto.style.color = 'var(--text-secondary)';
+        
+        adminIdInput.readOnly = false;
+        adminIdInput.style.opacity = '1';
+        adminIdHelp.innerText = 'ID tài khoản Zalo của admin tối cao';
+        adminIdHelp.style.color = 'var(--text-secondary)';
+    });
     
     btnClearConsole.addEventListener('click', () => {
         terminalBody.innerHTML = '';
@@ -185,6 +233,42 @@ document.addEventListener('DOMContentLoaded', () => {
             botPrefixInput.value = data.prefix || '?';
             statBotName.innerText = data.bot_name || 'Zalo Bot';
             if (mobileBotName) mobileBotName.innerText = data.bot_name || 'Zalo Bot';
+            
+            // Check if loaded admin ID matches Zalo session profile UID
+            try {
+                const profileRes = await fetch('/api/bot/zalo-profile');
+                const profileData = await profileRes.json();
+                if (profileData.status === 'success' && profileData.uid && profileData.uid === data.admin_id) {
+                    btnAdminAuto.classList.add('active');
+                    btnAdminAuto.style.background = 'rgba(47,129,247,0.15)';
+                    btnAdminAuto.style.color = 'var(--primary-color)';
+                    
+                    btnAdminManual.classList.remove('active');
+                    btnAdminManual.style.background = 'rgba(255,255,255,0.05)';
+                    btnAdminManual.style.color = 'var(--text-secondary)';
+                    
+                    adminIdInput.readOnly = true;
+                    adminIdInput.style.opacity = '0.7';
+                    adminIdHelp.innerText = `[TỰ ĐỘNG] Đã tự động nhận diện ID từ phiên: ${profileData.name || 'Zalo Account'} (${profileData.uid})`;
+                    adminIdHelp.style.color = 'var(--success-color)';
+                } else {
+                    // Default to Manual mode
+                    btnAdminManual.classList.add('active');
+                    btnAdminManual.style.background = 'rgba(47,129,247,0.15)';
+                    btnAdminManual.style.color = 'var(--primary-color)';
+                    
+                    btnAdminAuto.classList.remove('active');
+                    btnAdminAuto.style.background = 'rgba(255,255,255,0.05)';
+                    btnAdminAuto.style.color = 'var(--text-secondary)';
+                    
+                    adminIdInput.readOnly = false;
+                    adminIdInput.style.opacity = '1';
+                    adminIdHelp.innerText = 'ID tài khoản Zalo của admin tối cao';
+                    adminIdHelp.style.color = 'var(--text-secondary)';
+                }
+            } catch (err) {
+                console.error('Error fetching Zalo profile:', err);
+            }
         } catch (err) {
             console.error('Error loading config:', err);
         }

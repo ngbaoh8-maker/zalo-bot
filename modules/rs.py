@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 import os
 import time
 from zlapi.models import Message, Mention, ThreadType, MultiMsgStyle, MessageStyle
@@ -48,6 +48,8 @@ def handle_reset_command(message, message_object, thread_id, thread_type, author
 
 def send_reset_success_message(client):
     try:
+        if not os.path.exists("modules/cache/restart_info.txt"):
+            return
         with open("modules/cache/restart_info.txt", "r") as f:
             lines = f.readlines()
             thread_id = lines[0].strip()

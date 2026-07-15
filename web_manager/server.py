@@ -139,12 +139,28 @@ qr_login_states = {}   # username -> state dict
 qr_threads = {}        # username -> Thread
 qr_api_instances = {}  # username -> ZaloAPI instance
 
-def save_login_to_config(username, cookies, imei):
+def save_login_to_config(username, cookies, imei, uid=None, name=None):
     user_dir = os.path.join(ROOT_DIR, 'users', username)
     os.makedirs(user_dir, exist_ok=True)
     session_path = os.path.join(user_dir, 'session.json')
+    
+    # Keep old values if they exist and new ones are not provided
+    existing_data = {}
+    if os.path.exists(session_path):
+        try:
+            with open(session_path, 'r', encoding='utf-8') as f:
+                existing_data = json.load(f)
+        except Exception:
+            pass
+            
+    session_data = {
+        "cookies": cookies,
+        "imei": imei,
+        "uid": uid or existing_data.get("uid"),
+        "name": name or existing_data.get("name")
+    }
     with open(session_path, 'w', encoding='utf-8') as f:
-        json.dump({"cookies": cookies, "imei": imei}, f, indent=4, ensure_ascii=False)
+        json.dump(session_data, f, indent=4, ensure_ascii=False)
 
 def qr_login_worker(username):
     global qr_login_states, qr_api_instances
@@ -163,11 +179,11 @@ def qr_login_worker(username):
         # Use temp file for QR
         tmp_fd, tmp_qr_path = tempfile.mkstemp(suffix='.png')
         os.close(tmp_fd)
-
+ 
         # Initialize ZaloAPI with no credentials
         api_instance = ZaloAPI("", "", "", auto_login=False)
         qr_api_instances[username] = api_instance
-
+ 
         def on_qr_gen(path):
             try:
                 with open(path, 'rb') as f:
@@ -176,22 +192,25 @@ def qr_login_worker(username):
             except Exception:
                 pass
             qr_login_states[username]["status"] = "generated"
-
+ 
         # Start QR login flow
         result = api_instance.loginWithQR(
             qr_path=tmp_qr_path,
             on_qr_generated=on_qr_gen
         )
-
+ 
         if result and result.get("status") == "success":
             cookies = api_instance._state.get_cookies()
             imei = api_instance._state.user_imei or api_instance._imei
+            user_info = result.get("userInfo") or {}
+            zalo_uid = user_info.get("uid") or user_info.get("userId")
+            zalo_name = user_info.get("name")
             
             # Save session to config.py
-            save_login_to_config(username, cookies, imei)
+            save_login_to_config(username, cookies, imei, zalo_uid, zalo_name)
             
             qr_login_states[username]["status"] = "success"
-            qr_login_states[username]["user_info"] = result.get("userInfo")
+            qr_login_states[username]["user_info"] = user_info
         else:
             qr_login_states[username]["status"] = "failed"
             qr_login_states[username]["error_message"] = "Đăng nhập không thành công."
@@ -375,6 +394,26 @@ def get_qr_status():
     username = session['username']
     state = qr_login_states.get(username, {"status": "idle"})
     return jsonify(state)
+
+@app.route('/api/bot/zalo-profile', methods=['GET'])
+def get_zalo_profile():
+    username = session['username']
+    user_dir = os.path.join(ROOT_DIR, 'users', username)
+    session_path = os.path.join(user_dir, 'session.json')
+    
+    if os.path.exists(session_path):
+        try:
+            with open(session_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return jsonify({
+                "status": "success",
+                "uid": data.get("uid"),
+                "name": data.get("name")
+            })
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)})
+            
+    return jsonify({"status": "success", "uid": None, "name": None})
 
 # ============================
 # BOT CONTROL API

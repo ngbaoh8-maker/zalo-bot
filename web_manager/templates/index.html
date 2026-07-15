@@ -79,6 +79,7 @@
                     <nav class="side-nav">
                         <a href="#" class="nav-item active"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
                         <a href="https://zalo.me/g/ur58vacl0hhscxjwfzsj" target="_blank" class="nav-item"><i class="fa-solid fa-users"></i> Nhóm Hỗ Trợ</a>
+                        <a href="https://zalo.me/0911037051" target="_blank" class="nav-item"><i class="fa-solid fa-comment-dots"></i> Inbox Admin</a>
                     </nav>
                 </div>
                 
@@ -173,9 +174,15 @@
                         </div>
                         
                         <div class="form-group">
-                            <label for="admin-id"><i class="fa-solid fa-user-shield"></i> ID Admin</label>
+                            <label for="admin-id" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                                <span><i class="fa-solid fa-user-shield"></i> ID Admin</span>
+                                <div class="admin-mode-toggle" style="display: flex; gap: 0.5rem; margin-bottom: 2px;">
+                                    <button type="button" class="btn-xs" id="btn-admin-auto" style="font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.05); color: var(--text-secondary); cursor: pointer; transition: all 0.2s;"><i class="fa-solid fa-magic"></i> Tự động</button>
+                                    <button type="button" class="btn-xs active" id="btn-admin-manual" style="font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(47,129,247,0.15); color: var(--primary-color); cursor: pointer; transition: all 0.2s;"><i class="fa-solid fa-keyboard"></i> Thủ công</button>
+                                </div>
+                            </label>
                             <input type="text" id="admin-id" placeholder="Ví dụ: 637876082720685615" required>
-                            <small class="form-help">ID tài khoản Zalo của admin tối cao</small>
+                            <small class="form-help" id="admin-id-help">ID tài khoản Zalo của admin tối cao</small>
                         </div>
                         
                         <div class="form-group">
